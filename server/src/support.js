@@ -1,22 +1,15 @@
 // Support : enregistre la demande et l'envoie par mail a l'adresse du support (SMTP a configurer)
 import { Router } from 'express';
-import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import { JWT_SECRET } from './auth.js';
+import { mailer } from './mail.js';
 
 export const supportRouter = Router();
 
 // Adresse du support : uniquement par variable d'environnement, jamais envoyee au navigateur
 const TO = process.env.SUPPORT_TO?.trim() || null;
-const transport = process.env.SMTP_HOST && TO
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT ?? 587),
-      secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-    })
-  : null;
+const transport = TO ? mailer : null;
 
 const recent = new Map();
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -64,7 +57,7 @@ supportRouter.post('/', async (req, res) => {
   if (!transport) return res.status(202).json({ id, mailed: false });
   try {
     await transport.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: TO,
       replyTo: email || undefined,
       subject: `[BetterMove #${id}] [${category}] ${subject}`,

@@ -251,6 +251,12 @@ Support (onglet Support) : chaque demande est enregistree (table support_message
 (marquer traitee, supprimer). Envoi par mail en plus si SUPPORT_TO et SMTP_* sont renseignes. Aucune adresse
 mail n'apparait dans le site. Demandes effacees au bout de 2 ans.
 
+Mot de passe oublie : chaque joueur peut lier une adresse e-mail (facultative) a son compte, a l'inscription
+ou dans Compte > Mon adresse e-mail (mot de passe exige). L'adresse est confirmee par un lien (48 h). Ensuite
+"Mot de passe oublie ?" envoie un lien a usage unique valable 1 h (/compte/reinitialiser/<jeton>), qui change
+le mot de passe et deconnecte tous les appareils. Seul le hachage des jetons est stocke (table auth_tokens).
+Necessite SMTP_* et SITE_URL dans .env ; en dev sans SMTP, les liens sont ecrits dans les logs de l'API.
+
 Sauvegarde de la base :
   docker compose exec db pg_dump -U bettermove bettermove > sauvegarde.sql
 

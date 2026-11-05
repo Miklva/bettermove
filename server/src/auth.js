@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import { containsBanned, isAdmin } from './moderation.js';
 import { applyReferral } from './events.js';
+import crypto from 'node:crypto';
+import { SITE_URL, accountEmail, accountMailReady, sendMail } from './mail.js';
 
 // Secret de signature des sessions : obligatoire et long en production
 const PROD = process.env.NODE_ENV === 'production';
@@ -99,14 +101,16 @@ authRouter.post('/register', async (req, res) => {
   if (typeof password !== 'string' || password.length < 8)
     return res.status(400).json({ error: 'Mot de passe trop court (8 caracteres minimum)' });
   if (password.length > 128) return res.status(400).json({ error: 'Mot de passe trop long (128 caracteres maximum)' });
+  const email = cleanEmail(req.body?.email);
+  if (email === false) return res.status(400).json({ error: 'Adresse e-mail invalide' });
   // Pseudo deja pris, quelle que soit la casse (Bob et bob seraient confondus a la connexion)
   const taken = await pool.query('SELECT 1 FROM users WHERE lower(username) = lower($1)', [username]);
   if (taken.rows.length) return res.status(409).json({ error: 'Ce pseudo est deja pris' });
   const hash = await bcrypt.hash(password, 10);
   try {
     const { rows } = await pool.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username, session_version',
-      [username, hash],
+      'INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3) RETURNING id, username, session_version',
+      [username, hash, email],
     );
     setSession(res, rows[0]);
     // Lien de parrainage (evenement de lancement) : recompenses pour les deux. Le statut est renvoye a l'app.
@@ -115,7 +119,9 @@ authRouter.post('/register', async (req, res) => {
       return 'error';
     });
     if (referral !== 'none') console.log(`Parrainage a l'inscription de ${rows[0].username} : ${referral}`);
-    res.status(201).json({ user: { username: rows[0].username }, referral });
+    // Adresse donnee : lien de confirmation (l'inscription reussit meme si le mail ne part pas)
+    const emailSent = email ? await sendVerify(rows[0], email).then(() => accountMailReady(), (e) => (console.error('Mail de confirmation', e), false)) : false;
+    res.status(201).json({ user: { username: rows[0].username }, referral, emailSent });
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'Ce pseudo est deja pris' });
     throw e;
@@ -194,7 +200,7 @@ authRouter.get('/export', requireUser, async (req, res) => {
   const id = req.user.id;
   const one = (sql) => pool.query(sql, [id]).then((r) => r.rows);
   const [user, data, games, chat, dms, friends, mutes, online, challenges, daily, rush, gameChat, support, referrals] = await Promise.all([
-    one('SELECT username, created_at, last_seen, online_rating, online_games, avatar IS NOT NULL AS has_photo FROM users WHERE id = $1'),
+    one('SELECT username, email, email_verified, created_at, last_seen, online_rating, online_games, avatar IS NOT NULL AS has_photo FROM users WHERE id = $1'),
     one('SELECT key, value, updated_at FROM user_data WHERE user_id = $1'),
     one('SELECT id, data, source, result, played_at, deleted FROM games WHERE user_id = $1'),
     one('SELECT text, created_at FROM chat_messages WHERE user_id = $1'),
@@ -243,4 +249,166 @@ authRouter.delete('/account', requireUser, async (req, res) => {
   forgetSession(u.id);
   res.clearCookie(COOKIE, { ...cookieOptions, maxAge: undefined });
   res.json({ ok: true });
+});
+
+/* ---------------- Adresse e-mail et mot de passe oublie ---------------- */
+
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+/** null = pas d'adresse, false = invalide */
+function cleanEmail(v) {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string') return false;
+  const e = v.trim().toLowerCase();
+  if (!e) return null;
+  return e.length <= 200 && EMAIL_RE.test(e) ? e : false;
+}
+
+const VERIFY_TTL = 48 * 60 * 60 * 1000; // 48 h
+const RESET_TTL = 60 * 60 * 1000; // 1 h
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
+
+/** Cree un jeton a usage unique (seul son hachage est stocke) ; remplace les precedents du meme type */
+async function newToken(userId, kind, ttl, email = null) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  await pool.query('DELETE FROM auth_tokens WHERE user_id = $1 AND kind = $2', [userId, kind]);
+  await pool.query('INSERT INTO auth_tokens (token_hash, user_id, kind, email, expires_at) VALUES ($1, $2, $3, $4, $5)', [
+    hashToken(token),
+    userId,
+    kind,
+    email,
+    new Date(Date.now() + ttl),
+  ]);
+  return token;
+}
+
+/** Jeton valide (non expire) : le consomme et renvoie sa ligne */
+async function useToken(token, kind) {
+  if (typeof token !== 'string' || token.length < 20 || token.length > 100) return null;
+  const { rows } = await pool.query(
+    'DELETE FROM auth_tokens WHERE token_hash = $1 AND kind = $2 RETURNING user_id, email, expires_at',
+    [hashToken(token), kind],
+  );
+  const t = rows[0];
+  return t && new Date(t.expires_at).getTime() > Date.now() ? t : null;
+}
+
+async function sendVerify(user, email) {
+  if (!accountMailReady()) return;
+  const token = await newToken(user.id, 'verify', VERIFY_TTL, email);
+  await sendMail({
+    to: email,
+    subject: 'Confirme ton adresse e-mail BetterMove',
+    ...accountEmail({
+      username: user.username,
+      title: 'Confirme ton adresse e-mail',
+      intro: 'Confirme cette adresse pour pouvoir récupérer ton compte BetterMove si tu oublies un jour ton mot de passe.',
+      button: 'Confirmer mon adresse',
+      url: `${SITE_URL}/compte/confirmer/${token}`,
+      note: 'Ce lien est valable 48 heures.',
+      footer: "Tu n'as pas créé de compte BetterMove ? Ignore simplement ce message : l'adresse ne sera pas confirmée.",
+    }),
+  });
+}
+
+/** Adresse du compte connecte */
+authRouter.get('/email', requireUser, async (req, res) => {
+  const { rows } = await pool.query('SELECT email, email_verified FROM users WHERE id = $1', [req.user.id]);
+  res.json({ email: rows[0]?.email ?? null, verified: !!rows[0]?.email_verified, mail: accountMailReady() });
+});
+
+/** Ajouter, changer ou retirer son adresse : mot de passe exige (une session volee ne peut pas detourner le compte) */
+authRouter.put('/email', requireUser, async (req, res) => {
+  if (tooMany(req.ip)) return res.status(429).json({ error: 'Trop de tentatives, reessaie dans quelques minutes' });
+  const email = cleanEmail(req.body?.email);
+  if (email === false) return res.status(400).json({ error: 'Adresse e-mail invalide' });
+  const u = await checkPassword(req.user.id, req.body?.password);
+  if (!u) return res.status(403).json({ error: 'Mot de passe incorrect' });
+  await pool.query('UPDATE users SET email = $2, email_verified = false WHERE id = $1', [u.id, email]);
+  await pool.query("DELETE FROM auth_tokens WHERE user_id = $1", [u.id]);
+  let sent = false;
+  if (email) sent = await sendVerify(u, email).then(() => accountMailReady(), (e) => (console.error('Mail de confirmation', e), false));
+  res.json({ ok: true, email, verified: false, sent });
+});
+
+/** Renvoyer le lien de confirmation */
+authRouter.post('/email/resend', requireUser, async (req, res) => {
+  if (tooMany(req.ip, 'mail', 5, 60 * 60 * 1000)) return res.status(429).json({ error: 'Trop de mails envoyes, reessaie plus tard' });
+  const { rows } = await pool.query('SELECT id, username, email, email_verified FROM users WHERE id = $1', [req.user.id]);
+  const u = rows[0];
+  if (!u?.email) return res.status(400).json({ error: 'Aucune adresse sur ce compte' });
+  if (u.email_verified) return res.json({ ok: true, verified: true });
+  if (!accountMailReady()) return res.status(503).json({ error: 'Envoi de mails indisponible pour le moment' });
+  try {
+    await sendVerify(u, u.email);
+  } catch (e) {
+    console.error('Mail de confirmation', e);
+    return res.status(502).json({ error: 'Le mail n’a pas pu partir, reessaie plus tard' });
+  }
+  res.json({ ok: true });
+});
+
+/** Lien de confirmation ouvert (sans etre connecte : le jeton suffit) */
+authRouter.post('/verify-email', async (req, res) => {
+  if (tooMany(req.ip, 'token', 30)) return res.status(429).json({ error: 'Trop de tentatives, reessaie dans quelques minutes' });
+  const t = await useToken(req.body?.token, 'verify');
+  if (!t) return res.status(400).json({ error: 'Lien invalide ou expire' });
+  // L'adresse a pu changer depuis l'envoi : on ne confirme que celle du lien
+  const { rowCount } = await pool.query('UPDATE users SET email_verified = true WHERE id = $1 AND email = $2', [t.user_id, t.email]);
+  if (!rowCount) return res.status(400).json({ error: 'Cette adresse n’est plus celle du compte' });
+  res.json({ ok: true });
+});
+
+/** Mot de passe oublie : pseudo ou adresse. Reponse identique dans tous les cas (on ne revele pas qui a un compte). */
+authRouter.post('/forgot', async (req, res) => {
+  if (tooMany(req.ip, 'forgot', 5, 60 * 60 * 1000)) return res.status(429).json({ error: 'Trop de demandes, reessaie plus tard' });
+  const login = typeof req.body?.login === 'string' ? req.body.login.trim() : '';
+  if (!login || login.length > 200) return res.status(400).json({ error: 'Indique ton pseudo ou ton adresse e-mail' });
+  if (!accountMailReady())
+    return res.status(503).json({ error: 'La recuperation par e-mail n’est pas encore disponible : ecris au support depuis la page Aide' });
+  const { rows } = await pool.query(
+    `SELECT id, username, email FROM users
+     WHERE email IS NOT NULL AND email_verified AND (lower(username) = lower($1) OR lower(email) = lower($1)) LIMIT 5`,
+    [login],
+  );
+  for (const u of rows) {
+    // Un mail par compte toutes les 2 minutes au plus
+    const recent = await pool.query(
+      "SELECT 1 FROM auth_tokens WHERE user_id = $1 AND kind = 'reset' AND created_at > now() - interval '2 minutes'",
+      [u.id],
+    );
+    if (recent.rows.length) continue;
+    const token = await newToken(u.id, 'reset', RESET_TTL);
+    await sendMail({
+      to: u.email,
+      subject: 'Réinitialise ton mot de passe BetterMove',
+      ...accountEmail({
+        username: u.username,
+        title: 'Mot de passe oublié ?',
+        intro: 'Tu as demandé à choisir un nouveau mot de passe pour ton compte BetterMove. Clique sur le bouton ci-dessous pour le faire.',
+        button: 'Choisir un nouveau mot de passe',
+        url: `${SITE_URL}/compte/reinitialiser/${token}`,
+        note: 'Ce lien est valable 1 heure et ne peut servir qu’une seule fois.',
+        footer: "Ce n'est pas toi ? Ignore ce message : ton mot de passe actuel reste valable et personne n'a accès à ton compte.",
+      }),
+    }).catch((e) => console.error('Mail mot de passe oublie', e));
+  }
+  res.json({ ok: true });
+});
+
+/** Nouveau mot de passe depuis le lien recu par mail : deconnecte tous les appareils */
+authRouter.post('/reset', async (req, res) => {
+  if (tooMany(req.ip, 'token', 30)) return res.status(429).json({ error: 'Trop de tentatives, reessaie dans quelques minutes' });
+  const password = req.body?.password;
+  if (typeof password !== 'string' || password.length < 8 || password.length > 128)
+    return res.status(400).json({ error: 'Nouveau mot de passe : 8 a 128 caracteres' });
+  const t = await useToken(req.body?.token, 'reset');
+  if (!t) return res.status(400).json({ error: 'Lien invalide ou expire : refais une demande' });
+  const { rows } = await pool.query(
+    'UPDATE users SET password_hash = $2, session_version = session_version + 1 WHERE id = $1 RETURNING id, username',
+    [t.user_id, await bcrypt.hash(password, 10)],
+  );
+  if (!rows[0]) return res.status(400).json({ error: 'Compte introuvable' });
+  await pool.query('DELETE FROM auth_tokens WHERE user_id = $1 AND kind = $2', [t.user_id, 'reset']);
+  forgetSession(t.user_id);
+  res.json({ ok: true, username: rows[0].username });
 });

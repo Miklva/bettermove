@@ -26,6 +26,7 @@ import { SettingsProvider, useSettings } from './settings/settings';
 import { SettingsModal } from './settings/SettingsModal';
 import { Modal } from './components/Modal';
 import { AccountButton, AccountModal } from './sync/AccountModal';
+import { ResetPasswordModal } from './sync/ResetPassword';
 import { LevelModal, markWelcomeSeen, TourModal, WelcomeModal, welcomeSeen, WelcomeNext } from './onboarding/Onboarding';
 import { getLevel, isFreshProfile, LEVELS, setLevel, type Level } from './onboarding/level';
 import { openLessonNext } from './pages/LessonsPage';
@@ -198,6 +199,17 @@ function Shell() {
       navigate('/', true);
       return;
     }
+    // Liens recus par mail : confirmation d'adresse et nouveau mot de passe (le jeton est retire de l'adresse)
+    if (segs[0] === 'compte' && (segs[1] === 'confirmer' || segs[1] === 'reinitialiser')) {
+      const token = segs[2] ?? '';
+      if (segs[1] === 'reinitialiser') setResetToken(token);
+      else
+        apiCall('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) })
+          .then(() => setToast('✅ Adresse e-mail confirmée : tu pourras récupérer ton compte en cas d’oubli.'))
+          .catch((e) => setToast(e instanceof Error ? `Confirmation impossible : ${e.message}` : 'Confirmation impossible'));
+      navigate('/', true);
+      return;
+    }
     // Adresse inconnue : accueil ; adresse courte (/jouer, /communaute...) : adresse complete
     if (!routed) navigate('/', true);
     else if (segs.length < ROUTES[routed].length) navigate(pathOf(ROUTES[routed]), true);
@@ -224,7 +236,8 @@ function Shell() {
   const { settings, update } = useSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [accountMode, setAccountMode] = useState<'login' | 'register'>('login');
+  const [accountMode, setAccountMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [resetToken, setResetToken] = useState<string | null>(null);
   // Invitation de parrainage en attente (visite de /invite/<pseudo>, pas encore de compte)
   const readRef = () => {
     try {
@@ -421,6 +434,19 @@ function Shell() {
     return () => window.removeEventListener('bettermove-remote', on);
   }, []);
   const [toast, setToast] = useState<string | null>(null);
+  // Message laisse avant un rechargement (inscription avec e-mail, mot de passe change)
+  useEffect(() => {
+    const show = () => {
+      const n = sessionStorage.getItem('bettermove.notice');
+      if (n) {
+        sessionStorage.removeItem('bettermove.notice');
+        setToast(n);
+      }
+    };
+    show();
+    window.addEventListener('bettermove-notice', show);
+    return () => window.removeEventListener('bettermove-notice', show);
+  }, []);
   const [reviewRequest, setReviewRequest] = useState<ReviewRequest | null>(null);
   const [achQueue, setAchQueue] = useState<Achievement[]>([]);
   const onUnlock = useCallback((list: Achievement[]) => {
@@ -907,6 +933,17 @@ function Shell() {
         </button>
       )}
 
+      {resetToken && (
+        <ResetPasswordModal
+          token={resetToken}
+          onClose={() => setResetToken(null)}
+          onForgot={() => {
+            setResetToken(null);
+            setAccountMode('forgot');
+            setAccountOpen(true);
+          }}
+        />
+      )}
       {accountOpen && (
         <AccountModal
           initialMode={accountMode}

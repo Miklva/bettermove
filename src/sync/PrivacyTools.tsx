@@ -1,5 +1,5 @@
 // Mes donnees (RGPD) : export, changement de mot de passe, suppression du compte, effacement local.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { API_BASE, apiCall, logout } from './client';
 
 /** Efface toutes les donnees BetterMove de ce navigateur */
@@ -19,7 +19,17 @@ async function download(path: string, name: string) {
 }
 
 export function PrivacyTools({ user }: { user: string | null }) {
-  const [panel, setPanel] = useState<null | 'password' | 'delete' | 'wipe'>(null);
+  const [panel, setPanel] = useState<null | 'password' | 'delete' | 'wipe' | 'email'>(null);
+  const [mail, setMail] = useState<{ email: string | null; verified: boolean; mail: boolean } | null>(null);
+  const [newEmail, setNewEmail] = useState('');
+  useEffect(() => {
+    // Changement de compte ou deconnexion : on referme les panneaux du compte precedent
+    setPanel((p) => (p === 'wipe' ? p : null));
+    if (!user) return setMail(null);
+    apiCall<{ email: string | null; verified: boolean; mail: boolean }>('/auth/email')
+      .then(setMail)
+      .catch(() => setMail(null));
+  }, [user]);
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [alsoLocal, setAlsoLocal] = useState(true);
@@ -42,6 +52,7 @@ export function PrivacyTools({ user }: { user: string | null }) {
     setPanel(panel === p ? null : p);
     setCur('');
     setNext('');
+    setNewEmail(mail?.email ?? '');
     setErr(null);
     setMsg(null);
   };
@@ -53,6 +64,11 @@ export function PrivacyTools({ user }: { user: string | null }) {
         {user && (
           <button className="btn" disabled={busy} onClick={() => run(() => download('/auth/export', `bettermove-${user}.json`))}>
             📦 Télécharger mes données
+          </button>
+        )}
+        {user && (
+          <button className="btn ghost" onClick={() => open('email')}>
+            ✉️ Mon adresse e-mail{mail && !mail.email ? ' (à ajouter)' : mail && !mail.verified ? ' (à confirmer)' : ''}
           </button>
         )}
         {user && (
@@ -87,6 +103,61 @@ export function PrivacyTools({ user }: { user: string | null }) {
           <button className="btn primary" type="submit" disabled={busy || !cur || next.length < 8}>
             Changer
           </button>
+        </form>
+      )}
+
+      {panel === 'email' && (
+        <form
+          className="account-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => {
+              const r = await apiCall<{ email: string | null; sent: boolean }>('/auth/email', {
+                method: 'PUT',
+                body: JSON.stringify({ email: newEmail.trim(), password: cur }),
+              });
+              setMail({ email: r.email, verified: false, mail: mail?.mail ?? false });
+              setPanel(null);
+              setMsg(
+                !r.email
+                  ? 'Adresse retirée du compte.'
+                  : r.sent
+                    ? `Lien de confirmation envoyé à ${r.email} (valable 48 h). Pense aux spams.`
+                    : 'Adresse enregistrée, mais le mail de confirmation n’a pas pu partir pour le moment.',
+              );
+            });
+          }}
+        >
+          <p className="small">
+            {mail?.email ? (
+              <>
+                Adresse actuelle : <b>{mail.email}</b> {mail.verified ? '✅ confirmée' : '⏳ en attente de confirmation'}
+              </>
+            ) : (
+              'Aucune adresse : sans elle, un mot de passe oublié ne peut pas être récupéré.'
+            )}
+          </p>
+          {mail?.email && !mail.verified && (
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await apiCall('/auth/email/resend', { method: 'POST' });
+                  setMsg(`Nouveau lien envoyé à ${mail.email}.`);
+                })
+              }
+            >
+              Renvoyer le lien de confirmation
+            </button>
+          )}
+          <input className="text-input" type="email" autoComplete="email" placeholder="Nouvelle adresse (vide pour la retirer)" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+          <input className="text-input" type="password" autoComplete="current-password" placeholder="Ton mot de passe pour confirmer" value={cur} onChange={(e) => setCur(e.target.value)} />
+          <button className="btn primary" type="submit" disabled={busy || !cur || newEmail.trim() === (mail?.email ?? '')}>
+            Enregistrer
+          </button>
+          <p className="muted small">Ton adresse sert uniquement à récupérer ton compte. Elle n’est jamais visible des autres joueurs.</p>
         </form>
       )}
 

@@ -3,7 +3,7 @@ import { Modal } from '../components/Modal';
 import { MyAvatar } from '../profile/avatar';
 import { ProfilePhoto } from '../profile/ProfilePhoto';
 import { PrivacyTools } from './PrivacyTools';
-import { getSyncState, login, logout, subscribe, syncNow, type SyncStatus } from './client';
+import { apiCall, getSyncState, login, logout, subscribe, syncNow, type SyncStatus } from './client';
 
 let snapshot = getSyncState();
 const sub = (fn: () => void) => {
@@ -47,7 +47,7 @@ export function AccountModal({
   initialMode = 'login',
 }: {
   /** Ouvre directement l'onglet "Creer un compte" (invitation de parrainage) */
-  initialMode?: 'login' | 'register';
+  initialMode?: 'login' | 'register' | 'forgot';
   onProfile: () => void;
   onClose: () => void;
   onInitiation: () => void;
@@ -55,9 +55,11 @@ export function AccountModal({
   onLevel: () => void;
 }) {
   const s = useSync();
-  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,7 +67,12 @@ export function AccountModal({
     setBusy(true);
     setError(null);
     try {
-      const changed = await login(username.trim(), password, mode === 'register');
+      if (mode === 'forgot') {
+        await apiCall('/auth/forgot', { method: 'POST', body: JSON.stringify({ login: username.trim() }) });
+        setSent(true);
+        return;
+      }
+      const changed = await login(username.trim(), password, mode === 'register', email.trim() || undefined);
       // Des donnees plus recentes sont arrivees du serveur : on recharge l'app
       if (changed) window.location.reload();
       else onClose();
@@ -161,28 +168,92 @@ export function AccountModal({
                 Créer un compte
               </button>
             </div>
-            <input
-              className="text-input"
-              placeholder="Pseudo"
-              autoComplete="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-            <input
-              className="text-input"
-              type="password"
-              placeholder={mode === 'register' ? 'Mot de passe (8 caractères min.)' : 'Mot de passe'}
-              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {(error || s.error) && <p className="error">{error ?? s.error}</p>}
-            <button className="btn primary" type="submit" disabled={busy || !username.trim() || !password}>
-              {busy ? '…' : mode === 'register' ? 'Créer mon compte' : 'Connexion'}
-            </button>
+            {mode === 'forgot' ? (
+              <>
+                <p className="muted small">
+                  Indique ton pseudo ou ton adresse e-mail : si une adresse confirmée est liée au compte, tu recevras un lien pour
+                  choisir un nouveau mot de passe.
+                </p>
+                <input
+                  className="text-input"
+                  placeholder="Pseudo ou adresse e-mail"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setSent(false);
+                  }}
+                />
+                {sent && (
+                  <p className="success-text small">
+                    Si un compte correspond, un e-mail vient de partir (lien valable 1 heure). Pense à regarder dans les spams.
+                  </p>
+                )}
+                {error && <p className="error">{error}</p>}
+                <button className="btn primary" type="submit" disabled={busy || !username.trim()}>
+                  {busy ? '…' : 'Recevoir le lien'}
+                </button>
+                <button type="button" className="link-btn small" onClick={() => setMode('login')}>
+                  ← Retour à la connexion
+                </button>
+                <p className="muted small">
+                  Pas d’adresse sur ton compte ? Écris au{' '}
+                  <a href="/aide" target="_blank" rel="noopener">
+                    support
+                  </a>{' '}
+                  depuis la page Aide.
+                </p>
+              </>
+            ) : (
+              <>
+                <input
+                  className="text-input"
+                  placeholder="Pseudo"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+                <input
+                  className="text-input"
+                  type="password"
+                  placeholder={mode === 'register' ? 'Mot de passe (8 caractères min.)' : 'Mot de passe'}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                {mode === 'register' && (
+                  <input
+                    className="text-input"
+                    type="email"
+                    placeholder="E-mail (facultatif, pour récupérer ton compte)"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                )}
+                {(error || s.error) && <p className="error">{error ?? s.error}</p>}
+                <button className="btn primary" type="submit" disabled={busy || !username.trim() || !password}>
+                  {busy ? '…' : mode === 'register' ? 'Créer mon compte' : 'Connexion'}
+                </button>
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    className="link-btn small"
+                    onClick={() => {
+                      setMode('forgot');
+                      setError(null);
+                      setSent(false);
+                    }}
+                  >
+                    Mot de passe oublié ?
+                  </button>
+                )}
+              </>
+            )}
             {mode === 'register' && (
               <p className="muted small">
-                Ta progression actuelle (Elo, XP, parties, succès) est envoyée sur ton nouveau compte. En créant un compte, tu
+                Ta progression actuelle (Elo, XP, parties, succès) est envoyée sur ton nouveau compte. Sans adresse e-mail,
+                un mot de passe oublié ne pourra pas être récupéré. En créant un compte, tu
                 acceptes les{' '}
                 <a href="/infos/conditions" target="_blank" rel="noopener">
                   conditions d’utilisation

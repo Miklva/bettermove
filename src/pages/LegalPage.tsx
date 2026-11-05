@@ -100,6 +100,12 @@ function Privacy({ support }: { support: ReactNode }) {
           (affichée aux autres joueurs : « en ligne », « vu il y a… »).
         </li>
         <li>
+          <b>Adresse e-mail (facultative)</b> : uniquement pour confirmer qu’elle t’appartient et t’envoyer un lien en cas de mot
+          de passe oublié. Jamais affichée aux autres joueurs, jamais utilisée pour de la publicité. Tu peux la changer ou la
+          retirer à tout moment (👤 Compte › Mon adresse e-mail). Les liens envoyés expirent après 1 heure (mot de passe) ou 48
+          heures (confirmation).
+        </li>
+        <li>
           <b>Progression synchronisée</b> : les données de l’app (Elo, XP, parties, succès, réglages, répertoire, notes du suivi,
           inventaire de la boutique) pour les retrouver sur tous tes appareils.
         </li>
@@ -148,7 +154,7 @@ function Privacy({ support }: { support: ReactNode }) {
       <ul>
         <li>Exécution du service que tu demandes : compte, synchronisation, jeu en ligne, messagerie.</li>
         <li>Intérêt légitime : sécurité, lutte contre les abus, modération de la communauté.</li>
-        <li>Consentement : photo de profil, e-mail laissé au support, informations techniques jointes.</li>
+        <li>Consentement : adresse e-mail du compte, photo de profil, e-mail laissé au support, informations techniques jointes.</li>
       </ul>
 
       <h2>Destinataires et hébergement</h2>

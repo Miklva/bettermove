@@ -352,7 +352,7 @@ export async function initSync(onRemoteChange: (atStartup: boolean) => void) {
   });
 }
 
-export async function login(username: string, password: string, create: boolean): Promise<boolean> {
+export async function login(username: string, password: string, create: boolean, email?: string): Promise<boolean> {
   // Lien de parrainage garde depuis la visite de /invite/<pseudo>
   let ref: string | undefined;
   try {
@@ -360,10 +360,17 @@ export async function login(username: string, password: string, create: boolean)
   } catch {
     ref = undefined;
   }
-  const r = await call<{ user: { username: string }; referral?: string }>(create ? '/auth/register' : '/auth/login', {
+  const r = await call<{ user: { username: string }; referral?: string; emailSent?: boolean }>(create ? '/auth/register' : '/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ username, password, ref }),
+    body: JSON.stringify({ username, password, ref, email: create && email ? email : undefined }),
   });
+  // Message affiche par l'app apres le chargement (la page peut se recharger)
+  if (create && email)
+    sessionStorage.setItem(
+      'bettermove.notice',
+      r.emailSent ? `✉️ Un lien de confirmation a été envoyé à ${email}` : 'Compte créé. Le mail de confirmation n’a pas pu partir : renvoie-le depuis 👤 Compte › Mon adresse e-mail.',
+    );
+  if (create && email) window.dispatchEvent(new Event('bettermove-notice'));
   // Resultat du parrainage, affiche par l'app apres l'inscription. Le lien n'est oublie qu'en cas de succes
   // (sinon il reste propose sur la page Evenements).
   if (create && ref) {

@@ -224,3 +224,19 @@ CREATE INDEX IF NOT EXISTS pending_rewards_user ON pending_rewards (user_id) WHE
 -- Parrainage : code d'invitation personnel (aleatoire, non devinable), cree a la premiere demande
 ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_invite_code ON users (invite_code);
+
+-- Adresse e-mail (facultative) : uniquement pour recuperer le compte. Jamais affichee aux autres joueurs.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS users_email_lower ON users (lower(email)) WHERE email IS NOT NULL;
+-- Liens envoyes par mail (confirmation d'adresse, mot de passe oublie) : seul le hachage du jeton est garde
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,
+  email      TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_tokens_user ON auth_tokens (user_id, kind);
+DELETE FROM auth_tokens WHERE expires_at < now() - interval '1 day';

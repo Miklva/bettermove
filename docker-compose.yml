@@ -37,6 +37,8 @@ services:
       BANNED_WORDS: ${BANNED_WORDS:-}
       # Evenement de lancement (30 jours) : date de debut, ex. 2026-12-01T00:00:00+01:00 (vide = premier demarrage)
       LAUNCH_EVENT_START: ${LAUNCH_EVENT_START:-}
+      # Adresse publique du site : liens des mails (confirmation d'adresse, mot de passe oublie)
+      SITE_URL: ${SITE_URL:-}
       # Support : demandes enregistrees en base (page Admin) et envoyees par mail si SMTP + SUPPORT_TO sont renseignes
       SUPPORT_TO: ${SUPPORT_TO:-}
       SMTP_HOST: ${SMTP_HOST:-}

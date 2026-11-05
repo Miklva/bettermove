@@ -31,3 +31,4 @@ dist-ssr
 public/puzzles
 *.zst
 *.tar
+_to_delete
