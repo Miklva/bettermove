@@ -3,7 +3,7 @@ import { Router } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import { JWT_SECRET } from './auth.js';
-import { mailer } from './mail.js';
+import { mailer, supportEmail } from './mail.js';
 
 export const supportRouter = Router();
 
@@ -61,7 +61,7 @@ supportRouter.post('/', async (req, res) => {
       to: TO,
       replyTo: email || undefined,
       subject: `[BetterMove #${id}] [${category}] ${subject}`,
-      text: `${message}\n\n---\nDe : ${name}${email ? ` <${email}>` : ''}${username ? ` (compte ${username})` : ''}\nContexte : ${JSON.stringify(context)}`,
+      ...supportEmail({ id, category, subject, message, name, email, username, context }),
     });
     await pool.query('UPDATE support_messages SET mailed = true WHERE id = $1', [id]);
     res.status(201).json({ id, mailed: true });

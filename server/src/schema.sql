@@ -240,3 +240,14 @@ CREATE TABLE IF NOT EXISTS auth_tokens (
 );
 CREATE INDEX IF NOT EXISTS auth_tokens_user ON auth_tokens (user_id, kind);
 DELETE FROM auth_tokens WHERE expires_at < now() - interval '1 day';
+
+-- Support : reponses envoyees au joueur depuis la page Admin (mail BetterMove)
+CREATE TABLE IF NOT EXISTS support_replies (
+  id         BIGSERIAL PRIMARY KEY,
+  support_id BIGINT NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+  author     TEXT NOT NULL,
+  message    TEXT NOT NULL,
+  mailed     BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS support_replies_support ON support_replies (support_id);

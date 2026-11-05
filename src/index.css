@@ -9772,3 +9772,29 @@ ul.event-list {
   font-family: ui-monospace, Consolas, monospace;
   letter-spacing: 0.12em;
 }
+.admin-support-reply {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: rgba(139, 212, 80, 0.08);
+  border-radius: 6px;
+}
+.admin-support-reply .pre {
+  margin: 4px 0 0;
+}
+.admin-support-form {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+}
+.admin-support-form textarea {
+  resize: vertical;
+  min-height: 90px;
+  font: inherit;
+}
+.admin-support-form .btn {
+  justify-self: start;
+}
+.admin-support-list li.handled:has(.admin-support-body) {
+  opacity: 1;
+}

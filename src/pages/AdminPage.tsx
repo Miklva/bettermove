@@ -113,17 +113,39 @@ interface SupportMsg {
   handled: boolean;
   account: string | null;
   createdAt: string;
+  replies: { message: string; mailed: boolean; createdAt: string }[];
 }
 
 /** Demandes envoyees via la page Support : lues ici, marquees comme traitees ou supprimees */
 function SupportInbox() {
   const [list, setList] = useState<SupportMsg[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
+  const [mailOn, setMailOn] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const reload = useCallback(() => {
-    apiCall<{ messages: SupportMsg[] }>('/admin/support')
-      .then((r) => setList(r.messages))
+    apiCall<{ messages: SupportMsg[]; mail: boolean }>('/admin/support')
+      .then((r) => {
+        setList(r.messages);
+        setMailOn(r.mail);
+      })
       .catch(() => setList([]));
   }, []);
+  const send = async (id: number) => {
+    setSending(true);
+    setNote(null);
+    try {
+      await apiCall(`/admin/support/${id}/reply`, { method: 'POST', body: JSON.stringify({ message: draft }) });
+      setDraft('');
+      setNote({ ok: true, text: 'Réponse envoyée au joueur ✔' });
+      reload();
+    } catch (e) {
+      setNote({ ok: false, text: e instanceof Error ? e.message : 'Envoi impossible' });
+    } finally {
+      setSending(false);
+    }
+  };
   useEffect(reload, [reload]);
   const act = async (id: number, kind: 'done' | 'undo' | 'delete') => {
     if (kind === 'delete' && !window.confirm('Supprimer définitivement cette demande ?')) return;
@@ -141,22 +163,51 @@ function SupportInbox() {
       <ul className="admin-support-list">
         {list.map((m) => (
           <li key={m.id} className={m.handled ? 'handled' : ''}>
-            <button className="admin-support-head link-like" onClick={() => setOpen(open === m.id ? null : m.id)}>
+            <button
+              className="admin-support-head link-like"
+              onClick={() => {
+                setOpen(open === m.id ? null : m.id);
+                setDraft('');
+                setNote(null);
+              }}
+            >
               <b>#{m.id}</b> <span className="chip small">{m.category ?? 'Autre'}</span> {m.subject}
+              {m.replies.length > 0 && <span className="chip small">↩ {m.replies.length}</span>}
               <span className="muted small"> · {m.account ?? m.name ?? 'Anonyme'} · {new Date(m.createdAt).toLocaleString('fr-FR')}</span>
             </button>
             {open === m.id && (
               <div className="admin-support-body">
                 <p className="pre">{m.message}</p>
-                <p className="muted small">
-                  {m.email ? (
-                    <>
-                      Réponse à : <a href={`mailto:${m.email}?subject=${encodeURIComponent(`Re: ${m.subject}`)}`}>{m.email}</a>
-                    </>
-                  ) : (
-                    'Pas d’e-mail laissé.'
-                  )}
-                </p>
+                <p className="muted small">{m.email ? <>E-mail du joueur : {m.email}</> : 'Pas d’e-mail laissé : réponse par mail impossible.'}</p>
+                {m.replies.map((r, i) => (
+                  <div key={i} className="admin-support-reply">
+                    <span className="muted small">↩ Réponse du {new Date(r.createdAt).toLocaleString('fr-FR')}</span>
+                    <p className="pre">{r.message}</p>
+                  </div>
+                ))}
+                {m.email && (
+                  <form
+                    className="admin-support-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void send(m.id);
+                    }}
+                  >
+                    <textarea
+                      className="text-input"
+                      rows={5}
+                      maxLength={5000}
+                      placeholder={`Ta réponse à ${m.account ?? m.name ?? 'ce joueur'} (envoyée par mail, signée « L’équipe BetterMove »)`}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                    />
+                    {!mailOn && <p className="error small">Envoi de mails non configuré sur le serveur (SMTP dans .env).</p>}
+                    {note && <p className={note.ok ? 'success-text small' : 'error small'}>{note.text}</p>}
+                    <button className="btn primary small" type="submit" disabled={sending || !mailOn || draft.trim().length < 2}>
+                      {sending ? 'Envoi…' : '✉️ Envoyer la réponse'}
+                    </button>
+                  </form>
+                )}
                 {m.context && Object.keys(m.context).length > 0 && <pre className="admin-support-ctx">{JSON.stringify(m.context, null, 2)}</pre>}
                 <div className="row">
                   <button className="btn small" onClick={() => act(m.id, m.handled ? 'undo' : 'done')}>

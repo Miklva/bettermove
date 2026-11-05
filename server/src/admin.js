@@ -4,6 +4,7 @@ import { pool } from './db.js';
 import { requireUser } from './auth.js';
 import { isAdmin } from './moderation.js';
 import { queueSnapshot } from './match.js';
+import { mailer, supportReplyEmail } from './mail.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireUser, (req, res, next) => {
@@ -135,8 +136,16 @@ adminRouter.get('/support', async (_req, res) => {
      FROM support_messages s LEFT JOIN users u ON u.id = s.user_id
      ORDER BY s.handled, s.created_at DESC LIMIT 200`,
   );
+  const replies = await q(
+    'SELECT support_id, message, mailed, created_at FROM support_replies WHERE support_id = ANY($1) ORDER BY created_at',
+    [rows.map((r) => r.id)],
+  );
   res.json({
+    mail: !!mailer,
     messages: rows.map((r) => ({
+      replies: replies
+        .filter((x) => String(x.support_id) === String(r.id))
+        .map((x) => ({ message: x.message, mailed: x.mailed, createdAt: x.created_at })),
       id: Number(r.id),
       name: r.name,
       email: r.email,
@@ -155,6 +164,39 @@ adminRouter.put('/support/:id', async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Demande inconnue' });
   await pool.query('UPDATE support_messages SET handled = $2 WHERE id = $1', [id, !!req.body?.handled]);
+  res.json({ ok: true });
+});
+
+/** Repondre au joueur : mail BetterMove (sans le contexte technique), la demande passe en traitee */
+adminRouter.post('/support/:id/reply', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Demande inconnue' });
+  const text = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (text.length < 2 || text.length > 5000) return res.status(400).json({ error: 'Réponse vide ou trop longue (5000 caractères maximum)' });
+  if (!mailer) return res.status(503).json({ error: 'Envoi de mails non configuré (SMTP dans .env)' });
+  const { rows } = await pool.query(
+    `SELECT s.id, s.name, s.email, s.subject, s.message, u.username FROM support_messages s
+     LEFT JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
+    [id],
+  );
+  const m = rows[0];
+  if (!m) return res.status(404).json({ error: 'Demande introuvable' });
+  if (!m.email) return res.status(400).json({ error: 'Le joueur n’a pas laissé d’adresse e-mail' });
+  try {
+    await mailer.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: m.email,
+      // Le joueur repond au support (et pas a l'adresse d'envoi si elles different)
+      replyTo: process.env.SUPPORT_TO || undefined,
+      subject: `Re: [BetterMove #${m.id}] ${m.subject}`,
+      ...supportReplyEmail({ id: m.id, name: m.username ?? m.name ?? 'joueur', subject: m.subject, reply: text, original: m.message }),
+    });
+  } catch (e) {
+    console.error('Reponse support', e);
+    return res.status(502).json({ error: 'Le mail n’a pas pu partir, réessaie plus tard' });
+  }
+  await pool.query('INSERT INTO support_replies (support_id, author, message, mailed) VALUES ($1, $2, $3, true)', [id, req.user.username, text]);
+  await pool.query('UPDATE support_messages SET handled = true WHERE id = $1', [id]);
   res.json({ ok: true });
 });
 
