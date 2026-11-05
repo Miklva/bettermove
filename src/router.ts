@@ -1,0 +1,123 @@
+// Routage minimal par l'URL (History API) : chaque page, sous-onglet, partie et profil a son lien.
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
+window.addEventListener('popstate', emit);
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+const getPath = () => window.location.pathname;
+
+/** Segments de l'URL courante, decodes (ex. /profil/Ana -> ['profil', 'Ana']) */
+export function segmentsOf(path: string): string[] {
+  return path
+    .split('/')
+    .filter(Boolean)
+    .map((s) => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    });
+}
+
+export function pathOf(segs: (string | number)[]): string {
+  return '/' + segs.map((s) => encodeURIComponent(String(s))).join('/');
+}
+
+/** Change l'URL ; replace = sans nouvelle entree dans l'historique */
+export function navigate(path: string, replace = false) {
+  if (path === window.location.pathname) return;
+  if (replace) window.history.replaceState(null, '', path);
+  else window.history.pushState(null, '', path);
+  emit();
+}
+
+export function usePath(): string {
+  return useSyncExternalStore(subscribe, getPath);
+}
+
+export function useSegments(): string[] {
+  const path = usePath();
+  return segmentsOf(path);
+}
+
+/**
+ * Synchronise un etat de page avec un segment de l'URL (dans les deux sens).
+ * - index : position du segment (0 = premier)
+ * - toSlug / fromSlug : conversion valeur <-> segment (fromSlug renvoie undefined si le segment est invalide)
+ * - enabled : false pour ne pas toucher a l'URL (ex. pendant une partie)
+ * Au chargement, l'URL est prioritaire ; ensuite chaque changement d'etat remplace le segment
+ * (et retire les segments suivants).
+ */
+export function useRouteSync<T>(
+  index: number,
+  value: T,
+  setValue: (v: T) => void,
+  toSlug: (v: T) => string | null,
+  fromSlug: (s: string) => T | undefined,
+  enabled = true,
+  /** Valeur a reprendre quand le segment disparait de l'URL (bouton Precedent), ex. null */
+  empty?: { value: T },
+) {
+  const segs = useSegments();
+  const seg = segs[index];
+  const first = useRef(true);
+  const firstIn = useRef(true);
+  const latest = useRef({ toSlug, fromSlug, setValue, value });
+  latest.current = { toSlug, fromSlug, setValue, value };
+
+  // URL -> etat
+  useEffect(() => {
+    const wasFirst = firstIn.current;
+    firstIn.current = false;
+    if (!enabled) return;
+    if (seg === undefined) {
+      if (!wasFirst && empty && latest.current.toSlug(latest.current.value) !== null) latest.current.setValue(empty.value);
+      return;
+    }
+    const v = latest.current.fromSlug(seg);
+    if (v !== undefined && latest.current.toSlug(v) !== latest.current.toSlug(latest.current.value)) latest.current.setValue(v);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seg, enabled]);
+
+  // Etat -> URL
+  useEffect(() => {
+    if (!enabled) return;
+    const cur = segmentsOf(window.location.pathname);
+    const urlSeg = cur[index];
+    const wasFirst = first.current;
+    if (first.current) {
+      first.current = false;
+      // L'URL porte deja une valeur valide differente : elle gagne (l'effet ci-dessus l'applique)
+      if (urlSeg !== undefined && fromSlug(urlSeg) !== undefined && toSlug(fromSlug(urlSeg) as T) !== toSlug(value)) return;
+    }
+    const slug = toSlug(value);
+    // Changer d'onglet remplace l'adresse ; ouvrir ou fermer un element (lecon, conversation...)
+    // ajoute une entree d'historique pour que Precedent fonctionne
+    if (slug === null) {
+      if (cur.length > index) navigate(pathOf(cur.slice(0, index)), wasFirst);
+      return;
+    }
+    if (urlSeg === slug) return;
+    if (cur.length < index) return; // page pas encore a la bonne adresse
+    navigate(pathOf([...cur.slice(0, index), slug]), wasFirst || urlSeg !== undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, enabled]);
+}
+
+/** Variante pour une liste fermee de valeurs : { valeur: 'segment' } */
+export function useRouteTab<T extends string>(index: number, value: T, setValue: (v: T) => void, slugs: Record<T, string>, enabled = true) {
+  useRouteSync(
+    index,
+    value,
+    setValue,
+    (v) => slugs[v] ?? null,
+    (s) => (Object.keys(slugs) as T[]).find((k) => slugs[k] === s),
+    enabled,
+  );
+}

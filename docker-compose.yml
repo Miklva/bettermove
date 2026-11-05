@@ -1,0 +1,77 @@
+# BetterMove : base PostgreSQL + API + site (nginx)
+#   docker compose up -d --build     puis http://localhost:8080
+# Les variables viennent du fichier .env (copie de .env.example).
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    environment:
+      POSTGRES_USER: bettermove
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bettermove}
+      POSTGRES_DB: bettermove
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bettermove -d bettermove"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    logging: *logs
+    environment:
+      DATABASE_URL: postgres://bettermove:${POSTGRES_PASSWORD:-bettermove}@db:5432/bettermove
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET manquant dans .env}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Proxys devant l'API : 1 (nginx seul) ou 2 (nginx + Caddy/Cloudflare), pour les limites par IP
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      # Communaute : moderateurs (pseudos separes par des virgules) et mots interdits en plus de la liste integree
+      ADMIN_USERS: ${ADMIN_USERS:-}
+      BANNED_WORDS: ${BANNED_WORDS:-}
+      # Evenement de lancement (30 jours) : date de debut, ex. 2026-12-01T00:00:00+01:00 (vide = premier demarrage)
+      LAUNCH_EVENT_START: ${LAUNCH_EVENT_START:-}
+      # Support : demandes enregistrees en base (page Admin) et envoyees par mail si SMTP + SUPPORT_TO sont renseignes
+      SUPPORT_TO: ${SUPPORT_TO:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Expose pour le mode dev (npm run dev utilise http://localhost:3001)
+    ports:
+      - "127.0.0.1:3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      # Informations legales affichees dans le site (pied de page) : a renseigner dans .env
+      args:
+        VITE_SITE_URL: ${SITE_URL:-}
+        VITE_LEGAL_EDITOR: ${LEGAL_EDITOR:-}
+        VITE_LEGAL_HOST_NAME: ${LEGAL_HOST_NAME:-}
+        VITE_LEGAL_HOST_ADDRESS: ${LEGAL_HOST_ADDRESS:-}
+        VITE_LEGAL_HOST_PHONE: ${LEGAL_HOST_PHONE:-}
+        VITE_SOURCE_URL: ${SOURCE_URL:-}
+    restart: unless-stopped
+    logging: *logs
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      # Les ~600 Mo de problemes ne sont pas copies dans l'image : on les monte
+      - ./public/puzzles:/usr/share/nginx/html/puzzles:ro
+
+volumes:
+  pgdata:
