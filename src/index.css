@@ -9798,3 +9798,7 @@ ul.event-list {
 .admin-support-list li.handled:has(.admin-support-body) {
   opacity: 1;
 }
+.text-input[readonly] {
+  opacity: 0.7;
+  cursor: default;
+}

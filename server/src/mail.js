@@ -95,7 +95,7 @@ export function supportEmail({ id, category, subject, message, name, email, user
   const profile = username ? `${SITE_URL}/profil/${encodeURIComponent(username)}` : null;
   const sender = [
     row('Nom', esc(name)),
-    row('E-mail', email ? `<a href="mailto:${esc(email)}" style="color:#3f7d17;">${esc(email)}</a>` : '<span style="color:#7a8475;">non communiqué</span>'),
+    row('E-mail', email ? esc(email) : '<span style="color:#7a8475;">non communiqué</span>'),
     row('Compte', profile ? `<a href="${esc(profile)}" style="color:#3f7d17;">${esc(username)}</a>` : '<span style="color:#7a8475;">visiteur sans compte</span>'),
     row('Reçu le', esc(when)),
   ].join('');
@@ -104,6 +104,9 @@ export function supportEmail({ id, category, subject, message, name, email, user
     .map(([k, v]) => row(CONTEXT_LABELS[k] ?? k, esc(typeof v === 'string' ? v : JSON.stringify(v))))
     .join('');
   const body = `
+      ${email ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;"><tr><td style="background:#fff6e0;border:1px solid #f0d58c;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.5;color:#6b4e00;">
+        <b>Ne réponds pas depuis ta messagerie</b> : le joueur recevrait cette fiche interne. Utilise le bouton <b>Répondre depuis l’admin</b>, il recevra un mail BetterMove propre.
+      </td></tr></table>` : ''}
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px;"><tr>
         <td style="background:#eaf5e0;color:#3f7d17;font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;">Demande #${esc(id)}</td>
         <td style="width:8px;"></td>
@@ -123,7 +126,7 @@ export function supportEmail({ id, category, subject, message, name, email, user
     preheader: message.slice(0, 120),
     body,
     footer: email
-      ? 'Réponds depuis la page Admin : le joueur reçoit un mail BetterMove propre, sans ces informations techniques.'
+      ? 'Fiche interne du support : ne pas transférer au joueur.'
       : 'Le joueur n’a pas laissé d’adresse : réponse impossible par mail.',
   });
   const text =

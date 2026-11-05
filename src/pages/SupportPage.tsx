@@ -1,6 +1,6 @@
 // Support : formulaire enregistre par le serveur (lu dans la page Admin, et envoye par mail si le SMTP est configure).
 // Aucune adresse mail n'apparait cote client.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { apiCall, HttpError } from '../sync/client';
 import { useSync } from '../sync/AccountModal';
 import { track } from '../achievements/events';
@@ -11,6 +11,23 @@ export function SupportPage() {
   const sync = useSync();
   const [name, setName] = useState(sync.user ?? '');
   const [email, setEmail] = useState('');
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  // Joueur connecte : pseudo du compte (non modifiable) et adresse du compte pre-remplie
+  useEffect(() => {
+    if (!sync.user) return;
+    setName(sync.user);
+    let stop = false;
+    apiCall<{ email: string | null }>('/auth/email')
+      .then((r) => {
+        if (stop || !r.email) return;
+        setAccountEmail(r.email);
+        setEmail((cur) => cur || r.email!);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [sync.user]);
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -95,12 +112,21 @@ export function SupportPage() {
       >
         <div className="form-row">
           <label>
-            <span className="label">Ton nom ou pseudo</span>
-            <input className="text-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+            <span className="label">{sync.user ? 'Ton pseudo' : 'Ton nom ou pseudo'}</span>
+            <input
+              className="text-input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              readOnly={!!sync.user}
+              title={sync.user ? 'Pseudo de ton compte' : undefined}
+            />
           </label>
           <label>
-            <span className="label">Ton e-mail (pour la réponse)</span>
-            <input className="text-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="toi@exemple.fr" />
+            <span className="label">
+              Ton e-mail (pour la réponse){accountEmail && email === accountEmail ? ' · celui de ton compte' : ''}
+            </span>
+            <input className="text-input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value.trim())} placeholder="toi@exemple.fr" />
           </label>
         </div>
         <span className="label">Catégorie</span>

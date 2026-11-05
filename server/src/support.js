@@ -41,7 +41,8 @@ supportRouter.post('/', async (req, res) => {
   } catch {
     /* visiteur */
   }
-  const name = clip(b.name, 100) || username || 'Anonyme';
+  // Joueur connecte : toujours le pseudo du compte (impossible de se faire passer pour un autre)
+  const name = username || clip(b.name, 100) || 'Anonyme';
   const category = clip(b.category, 40) || 'Autre';
   const context = typeof b.context === 'object' && b.context ? b.context : {};
 
@@ -59,7 +60,8 @@ supportRouter.post('/', async (req, res) => {
     await transport.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
       to: TO,
-      replyTo: email || undefined,
+      // Pas de Reply-To vers le joueur : repondre dans la messagerie lui enverrait la fiche interne.
+      // La reponse se fait depuis la page Admin (mail BetterMove propre).
       subject: `[BetterMove #${id}] [${category}] ${subject}`,
       ...supportEmail({ id, category, subject, message, name, email, username, context }),
     });
