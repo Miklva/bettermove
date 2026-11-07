@@ -27,7 +27,11 @@ import { SettingsModal } from './settings/SettingsModal';
 import { Modal } from './components/Modal';
 import { AccountButton, AccountModal } from './sync/AccountModal';
 import { ResetPasswordModal } from './sync/ResetPassword';
-import { LevelModal, markWelcomeSeen, TourModal, WelcomeModal, welcomeSeen, WelcomeNext } from './onboarding/Onboarding';
+import { LevelModal, markWelcomeSeen, WelcomeModal, welcomeSeen, WelcomeNext } from './onboarding/Onboarding';
+import { SpotlightTour, type TourStep } from './onboarding/SpotlightTour';
+import { Credits } from './components/Credits';
+import { RoadmapModal } from './components/Roadmap';
+import { CHAPTERS } from './lessons/courses';
 import { getLevel, isFreshProfile, LEVELS, setLevel, type Level } from './onboarding/level';
 import { openLessonNext } from './pages/LessonsPage';
 import { Avatar, reconcileAvatar } from './profile/avatar';
@@ -223,6 +227,8 @@ function Shell() {
     navigate(pathOf(ROUTES[m]));
   };
   const [helpOpen, setHelpOpen] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
+  const [roadmapOpen, setRoadmapOpen] = useState(false);
   // Ferme le menu d'aide au clic en dehors
   useEffect(() => {
     if (!helpOpen) return;
@@ -398,18 +404,15 @@ function Shell() {
 
 
   // Accueil : choix du niveau a la premiere visite, visite guidee, changement de niveau
-  const [onboard, setOnboard] = useState<null | 'welcome' | 'about' | 'level' | 'change' | { next: Level } | 'tour'>(() => {
+  const [onboard, setOnboard] = useState<null | 'welcome' | 'about' | 'level' | 'change' | { next: Level }>(() => {
     const fresh = !getLevel() && isFreshProfile(player.profile);
     // Nouvel arrivant : un mot de bienvenue, puis le choix du niveau
     if (fresh && !welcomeSeen()) return 'welcome';
     return fresh ? 'level' : null;
   });
-  const closeWelcome = (then: 'level' | 'support' | null) => {
+  const closeWelcome = () => {
     markWelcomeSeen();
-    if (then === 'support') {
-      setOnboard(null);
-      setMode('support');
-    } else setOnboard(onboard === 'welcome' && !getLevel() ? 'level' : null);
+    setOnboard(onboard === 'welcome' && !getLevel() ? 'level' : null);
   };
   const chooseLevel = (l: Level, change: boolean) => {
     const info = LEVELS.find((x) => x.id === l)!;
@@ -419,6 +422,237 @@ function Shell() {
     if (change) setToast(`Niveau mis à jour : ${info.title}`);
   };
   const [lessonsKey, setLessonsKey] = useState(0);
+  // Visite guidee sur les vraies pages (etape en cours, null = pas de visite)
+  const [tour, setTour] = useState<number | null>(null);
+  const novice = ['none', 'beginner'].includes(getLevel()?.level ?? 'none');
+  const firstChapter = CHAPTERS.find((c) => c.id === (novice ? 'initiation' : 'tactics')) ?? CHAPTERS[0];
+  const firstLesson = firstChapter.lessons[0];
+  const sub = (id: Mode, extra: string[] = []) => [`[data-tour=sub-${id}]`, ...extra];
+  const tourSteps: TourStep<Mode>[] = [
+    {
+      mode: 'home',
+      targets: ['[data-tour=home-next]'],
+      title: '🏠 Ton accueil',
+      text: 'Chaque jour, l’essentiel est ici : ta prochaine étape, le problème du jour et tes quêtes. Le logo BetterMove te ramène toujours ici.',
+    },
+    {
+      mode: 'bots',
+      targets: ['[data-tour=nav-play]', '[data-tour=subnav]'],
+      title: '♟️ Jouer',
+      text: 'Tout ce qui se joue sur un échiquier. Chaque espace a ses sous-onglets juste en dessous.',
+      chips: [
+        {
+          label: '🤖 Contre un bot',
+          step: {
+            mode: 'bots',
+            targets: sub('bots', ['.bot-grid']),
+            title: '🤖 Contre un bot',
+            text: 'De 400 à 2700 Elo, chacun avec son caractère : ils jouent et discutent comme des humains. Bats-les pour débloquer les suivants.',
+          },
+        },
+        {
+          label: '🌍 Contre le monde',
+          step: {
+            mode: 'world',
+            targets: sub('world'),
+            title: '🌍 Contre le monde',
+            text: 'Une partie classée contre un vrai joueur BetterMove de ton niveau, tiré au hasard. Il faut un compte (gratuit).',
+          },
+        },
+        {
+          label: '👥 1v1 sur cet écran',
+          step: {
+            mode: 'world',
+            targets: sub('local'),
+            title: '👥 1v1 sur cet écran',
+            text: 'Deux joueurs, un seul appareil : choisis la cadence, le plateau peut se retourner à chaque coup.',
+          },
+        },
+        {
+          label: '⚔️ Contre un ami',
+          step: {
+            mode: 'world',
+            targets: sub('online'),
+            title: '⚔️ Contre un ami',
+            text: 'Défie un ami depuis la Communauté. Revanche en un clic, et chat avec émojis pendant la partie.',
+          },
+        },
+      ],
+    },
+    {
+      mode: 'lessons',
+      targets: ['[data-tour=nav-learn]', '[data-tour=subnav]'],
+      title: '🎓 Apprendre',
+      text: 'Pour acquérir de nouvelles connaissances, à ton niveau.',
+      chips: [
+        {
+          label: '📚 Cours',
+          step: {
+            mode: 'lessons',
+            targets: sub('lessons'),
+            title: '📚 Cours',
+            text: 'Initiation, tactiques, mats, finales et ouvertures, leçon par leçon. 3 étoiles partout débloquent l’approfondissement.',
+          },
+        },
+        {
+          label: '👨‍🏫 Contre le professeur',
+          step: {
+            mode: 'lessons',
+            targets: sub('teacher'),
+            title: '👨‍🏫 Contre le professeur',
+            text: 'Une vraie partie où chaque coup est commenté : tu comprends pourquoi un coup est bon ou mauvais.',
+          },
+        },
+        {
+          label: '🧩 Problèmes',
+          step: {
+            mode: 'puzzles',
+            targets: sub('puzzles'),
+            title: '🧩 Problèmes',
+            text: 'Des milliers de positions à ton niveau, par thème. En cas d’erreur, l’app t’explique ce qui n’allait pas.',
+          },
+        },
+        {
+          label: '⚡ Puzzle Rush',
+          step: {
+            mode: 'rush',
+            targets: sub('rush'),
+            title: '⚡ Puzzle Rush',
+            text: 'Un maximum de problèmes contre la montre : 3 erreurs et c’est fini. Bats ton record !',
+          },
+        },
+        {
+          label: '📖 Répertoire',
+          step: {
+            mode: 'repertoire',
+            targets: sub('repertoire'),
+            title: '📖 Répertoire',
+            text: 'Choisis tes ouvertures et révise-les coup par coup : l’app joue l’adversaire jusqu’à ce que tu les connaisses par cœur.',
+          },
+        },
+      ],
+    },
+    {
+      mode: 'review',
+      targets: ['[data-tour=nav-progress]', '[data-tour=subnav]'],
+      title: '📈 Progresser',
+      text: 'Pour mesurer tes progrès et apprendre de tes propres parties.',
+      chips: [
+        {
+          label: '📜 Historique',
+          step: {
+            mode: 'review',
+            targets: sub('review'),
+            title: '📜 Historique',
+            text: 'Toutes tes parties (bots, en ligne, chess.com, Lichess), tes statistiques et l’analyse coup par coup avec Stockfish.',
+          },
+        },
+        {
+          label: '🎯 Suivi personnalisé',
+          step: {
+            mode: 'coach',
+            targets: sub('coach'),
+            title: '🎯 Suivi personnalisé',
+            text: 'Stockfish relit tes dernières parties et repère les erreurs qui reviennent. Détaillé juste après !',
+          },
+        },
+        {
+          label: '💡 Astuces',
+          step: {
+            mode: 'tips',
+            targets: sub('tips'),
+            title: '💡 Astuces',
+            text: 'Les bons réflexes à connaître, mis en avant selon les erreurs que tu fais le plus.',
+          },
+        },
+        {
+          label: '🏆 Succès',
+          step: {
+            mode: 'achievements',
+            targets: sub('achievements'),
+            title: '🏆 Succès',
+            text: 'Plus de 250 défis à débloquer, avec un jeu de mots chacun. Ils rapportent XP et pièces.',
+          },
+        },
+        {
+          label: '🎁 Niveaux',
+          step: {
+            mode: 'levels',
+            targets: sub('levels'),
+            title: '🎁 Niveaux',
+            text: 'Chaque niveau gagné offre une récompense, jusqu’à des skins animés exclusifs.',
+          },
+        },
+      ],
+    },
+    {
+      mode: 'coach',
+      targets: ['[data-tour=sub-coach]', '.coach-head'],
+      title: '🎯 Le suivi personnalisé, ton meilleur allié',
+      text: 'C’est le cœur de BetterMove. Stockfish relit tes parties (bots, chess.com, Lichess) et trouve les erreurs qui reviennent : pièces laissées en prise, tactiques ratées, finales mal jouées… Tu obtiens tes priorités et des exercices tirés de tes propres parties. Plus tu joues, plus il est précis.',
+    },
+    {
+      mode: 'community',
+      targets: ['[data-tour=nav-community]', '[data-tour=subnav]'],
+      title: '💬 Communauté',
+      text: 'Pour discuter, se défier et se comparer.',
+      chips: [
+        {
+          label: '💬 Salon',
+          step: {
+            mode: 'community',
+            targets: sub('community'),
+            title: '💬 Salon',
+            text: 'Le chat de tous les joueurs. Clique sur un pseudo pour voir son profil, l’ajouter en ami, lui écrire ou le défier.',
+          },
+        },
+        {
+          label: '🎉 Événements',
+          step: {
+            mode: 'events',
+            targets: sub('events'),
+            title: '🎉 Événements',
+            text: 'Des événements limités dans le temps, avec des récompenses exclusives. En ce moment : le parrainage du lancement.',
+          },
+        },
+        {
+          label: '🏆 Classement',
+          step: {
+            mode: 'leaderboard',
+            targets: sub('leaderboard'),
+            title: '🏆 Classement',
+            text: 'Les meilleurs joueurs BetterMove, en ligne, contre les bots et en problèmes.',
+          },
+        },
+      ],
+    },
+    {
+      mode: 'shop',
+      targets: ['[data-tour=nav-shop]', '[data-tour=coins]'],
+      title: '🛒 Boutique',
+      text: 'Parties, cours, quêtes et succès rapportent des pièces 🪙. Dépense-les en skins de pièces, plateaux, sons et émojis.',
+    },
+    {
+      mode: 'home',
+      targets: ['[data-tour=level]', '.account-btn', '[data-tour=help]', '[data-tour=settings]'],
+      title: '⭐ Ton espace',
+      text: 'Ton niveau et ses récompenses, ton compte pour sauvegarder ta progression, l’aide ❓ (pour revoir cette visite) et les réglages ⚙️.',
+    },
+    {
+      mode: 'lessons',
+      targets: [`[data-tour=chapter-${firstChapter.id}] .chapter-head`, `[data-tour=chapter-${firstChapter.id}] .path-node:first-child`],
+      title: '📚 Et maintenant, les cours',
+      text: novice
+        ? 'On te conseille de commencer par l’initiation : le plateau, les pièces et le but du jeu, en quelques minutes.'
+        : 'Commence par les armes tactiques : fourchette, clouage, enfilade… La base de la plupart des parties gagnées.',
+    },
+  ];
+  const startTour = () => {
+    setOnboard(null);
+    setAccountOpen(false);
+    setHelpOpen(false);
+    setTour(0);
+  };
   const startInitiation = () => {
     openLessonNext('init-board');
     setLessonsKey((k) => k + 1);
@@ -616,6 +850,7 @@ function Shell() {
             return (
               <button
                 key={g.id}
+                data-tour={`nav-${g.id}`}
                 className={`mode ${active ? 'active' : ''}`}
                 title={g.label}
                 ref={(el) => {
@@ -637,10 +872,11 @@ function Shell() {
           })}
         </nav>
         <div className="top-actions">
-          <button className="coin-chip" onClick={() => setMode('shop')} title="Tes pièces : ouvre la boutique">
+          <button className="coin-chip" data-tour="coins" onClick={() => setMode('shop')} title="Tes pièces : ouvre la boutique">
             🪙 {shop.coins}
           </button>
           <button
+            data-tour="level"
             className={`level-chip ${mode === 'levels' ? 'active' : ''}`}
             onClick={() => setMode('levels')}
             title={`${player.profile.xp} XP · ${lv.into}/${lv.needed} vers le niveau ${lv.level + 1} · récompenses de niveau`}
@@ -680,7 +916,7 @@ function Shell() {
             </button>
           )}
           <div className="help-wrap">
-            <button className={`icon-btn ${mode === 'support' ? 'active' : ''}`} onClick={() => setHelpOpen(!helpOpen)} title="Aide">
+            <button data-tour="help" className={`icon-btn ${mode === 'support' ? 'active' : ''}`} onClick={() => setHelpOpen(!helpOpen)} title="Aide">
               ❓
             </button>
             {helpOpen && (
@@ -690,7 +926,7 @@ function Shell() {
                     className="menu-item"
                     onClick={() => {
                       setHelpOpen(false);
-                      setOnboard('tour');
+                      startTour();
                     }}
                   >
                     🧭 Visite de l’application
@@ -722,11 +958,29 @@ function Shell() {
                   >
                     🛟 Contacter le support
                   </button>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setHelpOpen(false);
+                      setRoadmapOpen(true);
+                    }}
+                  >
+                    🔮 Prochainement
+                  </button>
+                  <button
+                    className="menu-item"
+                    onClick={() => {
+                      setHelpOpen(false);
+                      setCreditsOpen(true);
+                    }}
+                  >
+                    🎬 Crédits
+                  </button>
                 </div>
               </>
             )}
           </div>
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Paramètres">
+          <button className="icon-btn" data-tour="settings" onClick={() => setSettingsOpen(true)} title="Paramètres">
             ⚙️
           </button>
         </div>
@@ -736,10 +990,11 @@ function Shell() {
         const g = NAV.find((x) => x.id === groupOf(mode));
         if (!g || g.items.length < 2) return null;
         return (
-          <nav className="subnav">
+          <nav className="subnav" data-tour="subnav">
             {g.items.map((i) => (
               <button
                 key={i.id}
+                data-tour={`sub-${i.id}`}
                 className={`subtab ${mode === i.id ? 'active' : ''}`}
                 onClick={() => {
                   if (i.id === 'review' && mode === 'review') closeReview();
@@ -959,7 +1214,7 @@ function Shell() {
           onInitiation={startInitiation}
           onTour={() => {
             setAccountOpen(false);
-            setOnboard('tour');
+            startTour();
           }}
           onLevel={() => {
             setAccountOpen(false);
@@ -1011,20 +1266,47 @@ function Shell() {
         />
       )}
       {onboard && typeof onboard === 'object' && (
-        <WelcomeNext
-          level={onboard.next}
-          onInitiation={startInitiation}
-          onTour={() => setOnboard('tour')}
-          onPlay={() => {
-            setOnboard(null);
-            setMode('bots');
+        <WelcomeNext level={onboard.next} onTour={() => startTour()} onClose={() => setOnboard(null)} />
+      )}
+      {creditsOpen && <Credits onClose={() => setCreditsOpen(false)} />}
+      {roadmapOpen && (
+        <RoadmapModal
+          onClose={() => setRoadmapOpen(false)}
+          onIdea={() => {
+            setRoadmapOpen(false);
+            setMode('support');
           }}
-          onClose={() => setOnboard(null)}
         />
       )}
-      {onboard === 'tour' && <TourModal onClose={() => setOnboard(null)} />}
+      {tour !== null && (
+        <SpotlightTour
+          steps={tourSteps}
+          step={tour}
+          onStep={setTour}
+          onEnd={() => setTour(null)}
+          onMode={setMode}
+          finalActions={
+            <>
+              <button
+                className="btn primary big"
+                onClick={() => {
+                  setTour(null);
+                  openLessonNext(firstLesson.id);
+                  setLessonsKey((k) => k + 1);
+                  setMode('lessons');
+                }}
+              >
+                ▶ Commencer « {firstLesson.title} »
+              </button>
+              <button className="btn ghost" onClick={() => setTour(null)}>
+                J’explore seul
+              </button>
+            </>
+          }
+        />
+      )}
       {(onboard === 'welcome' || onboard === 'about') && (
-        <WelcomeModal onStart={() => closeWelcome('level')} onFeedback={() => closeWelcome('support')} />
+        <WelcomeModal onStart={() => closeWelcome()} />
       )}
         </>
       )}

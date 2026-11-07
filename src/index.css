@@ -9802,3 +9802,293 @@ ul.event-list {
   opacity: 0.7;
   cursor: default;
 }
+.btn.modal-cancel {
+  width: 100%;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+/* ---------- Visite guidee (projecteur sur les vraies pages) ---------- */
+.spot {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+}
+.spot-shade {
+  position: fixed;
+  inset: 0;
+  display: block;
+}
+.spot-ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(139, 212, 80, 0.55));
+}
+.spot-card {
+  position: fixed;
+  padding: 16px 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(139, 212, 80, 0.35);
+  animation: spot-in 0.18s ease-out;
+}
+@keyframes spot-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.spot-card h3 {
+  margin: 4px 0 6px;
+  font-size: 1.1rem;
+}
+.spot-card p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.spot-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.spot-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.spot-chip {
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.spot-nav {
+  justify-content: space-between;
+}
+.spot-final {
+  display: grid;
+  gap: 8px;
+}
+.spot-final .link-btn {
+  justify-self: center;
+}
+@media (max-width: 600px) {
+  .spot-card {
+    left: 12px !important;
+    right: 12px;
+    width: auto !important;
+  }
+}
+
+/* ---------- Accueil epure ---------- */
+.home-card.main {
+  border-color: rgba(139, 212, 80, 0.45);
+  background: linear-gradient(160deg, rgba(139, 212, 80, 0.12), transparent 70%), var(--card);
+}
+.daily-head {
+  align-items: center;
+}
+.daily-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.daily-badge.win {
+  background: rgba(139, 212, 80, 0.15);
+  color: var(--accent);
+}
+.daily-after {
+  justify-content: flex-end;
+  gap: 8px;
+}
+.quests-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.quests-more {
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+/* ---------- Credits facon cinema ---------- */
+.credits {
+  position: fixed;
+  inset: 0;
+  z-index: 3100;
+  background: #050604;
+  color: #f2f4ee;
+  animation: credits-fade 0.6s ease-out;
+}
+@keyframes credits-fade {
+  from {
+    opacity: 0;
+  }
+}
+.credits-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.credits-window {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* Fondu en haut et en bas, comme a l'ecran */
+  mask-image: linear-gradient(transparent 0, #000 14%, #000 86%, transparent 100%);
+}
+.credits-roll {
+  position: absolute;
+  left: 50%;
+  width: min(560px, 90vw);
+  text-align: center;
+  transform: translate(-50%, 100vh);
+  animation: credits-roll 70s linear forwards;
+}
+.credits-window:hover .credits-roll {
+  animation-play-state: paused;
+}
+@keyframes credits-roll {
+  to {
+    transform: translate(-50%, calc(-100% + 55vh));
+  }
+}
+.credits-logo {
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.credits-logo b {
+  color: var(--accent);
+}
+.credits-tagline {
+  color: #a9b0a2;
+  font-style: italic;
+  margin: 6px 0 90px;
+}
+.credits-block {
+  margin: 0 0 56px;
+}
+.credits-block h3 {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #8f9888;
+}
+.credits-block p {
+  margin: 4px 0;
+  font-size: 1.25rem;
+}
+.credits-you {
+  font-size: 1.6rem !important;
+  color: var(--accent);
+}
+.credits-note {
+  color: #8f9888;
+  font-size: 0.85rem;
+  margin: 0 0 12px;
+}
+.credits-end {
+  margin-top: 30vh;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .credits-window {
+    overflow-y: auto;
+  }
+  .credits-roll {
+    position: static;
+    margin: 12vh auto;
+    transform: none;
+    animation: none;
+  }
+}
+
+/* ---------- Prochainement ---------- */
+.roadmap-when {
+  margin: 16px 0 6px;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.roadmap-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.roadmap-list li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.roadmap-list p {
+  margin: 2px 0 0;
+}
+.roadmap-icon {
+  font-size: 1.4rem;
+  line-height: 1.2;
+}
+.roadmap .btn.wide {
+  width: 100%;
+  margin-top: 16px;
+}
+button.spot-chip {
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+button.spot-chip:hover,
+button.spot-chip:focus-visible {
+  border-color: var(--accent);
+  background: rgba(139, 212, 80, 0.12);
+}
+.spot-hint {
+  margin: -4px 0 12px !important;
+}
+button.spot-chip.on {
+  border-color: var(--accent);
+  background: rgba(139, 212, 80, 0.18);
+}
+.spot-detail {
+  margin: -4px 0 12px !important;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(139, 212, 80, 0.07);
+  font-size: 0.9rem;
+  animation: spot-in 0.15s ease-out;
+}

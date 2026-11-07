@@ -145,7 +145,7 @@ function CourseMap({ player, onOpen }: { player: PlayerProfile; onOpen: (c: Chap
         const pg = unlockedAdv ? (page[ch.id] ?? 0) : 0;
         const go = (n: number) => setPage((o) => ({ ...o, [ch.id]: n }));
         return (
-          <section key={ch.id} className="chapter" style={{ '--chapter': ch.color } as React.CSSProperties}>
+          <section key={ch.id} className="chapter" data-tour={`chapter-${ch.id}`} style={{ '--chapter': ch.color } as React.CSSProperties}>
             <header className="chapter-head">
               <span className="chapter-icon">{ch.icon}</span>
               <div>

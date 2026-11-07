@@ -40,6 +40,28 @@ export function QuestsCard({ hasAccount, onGo }: { hasAccount: boolean; onGo: (p
   const daily = s.daily.map((id) => questById(id)).filter((q): q is Quest => !!q);
   const allClaimed = daily.length > 0 && daily.every((q) => s.claimed.includes(q.id));
   const weekly = questById(s.weekly);
+  // Repliees par defaut (accueil plus lisible), ouvertes d'office s'il y a quelque chose a recuperer
+  const doneCount = daily.filter((q) => progressOf(q, 'day').done).length;
+  const toClaim =
+    daily.some((q) => progressOf(q, 'day').done && !s.claimed.includes(q.id)) ||
+    (allClaimed && !s.bonus) ||
+    (!!weekly && progressOf(weekly, 'week').done && !s.weekClaimed);
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem('bettermove.questsOpen') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    try {
+      localStorage.setItem('bettermove.questsOpen', open ? '0' : '1');
+    } catch {
+      /* rien */
+    }
+    setOpen(!open);
+  };
+  const shown = open || toClaim;
 
   const row = (q: Quest, kind: 'day' | 'week') => {
     const p = progressOf(q, kind);
@@ -80,10 +102,14 @@ export function QuestsCard({ hasAccount, onGo }: { hasAccount: boolean; onGo: (p
   return (
     <section className="card quests-card">
       <div className="quests-head">
-        <div>
-          <div className="tc-label">🎯 Quêtes du jour</div>
-          <span className="muted tiny">Nouvelles quêtes dans {untilMidnight()}</span>
-        </div>
+        <button className="quests-toggle" onClick={toggle} aria-expanded={shown}>
+          <span className="tc-label">🎯 Quêtes du jour</span>
+          <span className="muted tiny">
+            {doneCount}/{daily.length} terminées{weekly ? ` · défi de la semaine ${progressOf(weekly, 'week').value}/${weekly.target}` : ''} ·
+            nouvelles dans {untilMidnight()}
+          </span>
+          <span className="quests-more small">{shown ? 'Masquer ▴' : 'Voir les quêtes ▾'}</span>
+        </button>
         <button
           className={`chest ${chestOpen ? 'open' : 'ready'}`}
           disabled={chestOpen}
@@ -108,6 +134,8 @@ export function QuestsCard({ hasAccount, onGo }: { hasAccount: boolean; onGo: (p
           </span>
         </button>
       </div>
+      {shown && (
+        <>
       <ul className="quest-list">{daily.map((q) => row(q, 'day'))}</ul>
       <div className={`quest-bonus ${s.bonus ? 'claimed' : allClaimed ? 'ready' : ''}`}>
         <span>
@@ -132,6 +160,8 @@ export function QuestsCard({ hasAccount, onGo }: { hasAccount: boolean; onGo: (p
         <>
           <div className="tc-label quests-week">🗓️ Défi de la semaine</div>
           <ul className="quest-list">{row(weekly, 'week')}</ul>
+        </>
+      )}
         </>
       )}
     </section>

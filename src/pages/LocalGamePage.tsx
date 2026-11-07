@@ -8,6 +8,7 @@ import { recordGame } from '../achievements/facts';
 import { GameLayout, copyText } from '../components/GameLayout';
 import { Modal } from '../components/Modal';
 import { NewGameModal } from '../components/NewGameModal';
+import { navigate } from '../router';
 import { rewardLocal } from '../economy/rewards';
 
 interface Props {
@@ -19,7 +20,9 @@ type Dialog = null | 'new' | 'resign' | 'draw' | 'over';
 
 export function LocalGamePage({ notify, onReview }: Props) {
   const g = useGame('bettermove.localGame.v1');
-  const [dialog, setDialog] = useState<Dialog>(g.hadSavedGame ? null : 'new');
+  // Partie reellement commencee : lancee depuis le choix de cadence, ou reprise avec des coups joues
+  const [started, setStarted] = useState(() => g.hadSavedGame && (g.moves.length > 0 || !!g.result));
+  const [dialog, setDialog] = useState<Dialog>(started ? null : 'new');
   const names = { w: g.settings.whiteName, b: g.settings.blackName };
 
   // Ouvre la fenetre de fin de partie quand le resultat tombe
@@ -85,9 +88,11 @@ export function LocalGamePage({ notify, onReview }: Props) {
       {dialog === 'new' && (
         <NewGameModal
           initial={g.settings}
-          onClose={g.hadSavedGame || g.moves.length > 0 ? () => setDialog(null) : undefined}
+          // Aucune partie en cours : annuler ramene a l'accueil (sinon on resterait bloque sur ce choix)
+          onClose={started ? () => setDialog(null) : () => navigate('/')}
           onStart={(s) => {
             g.newGame(s);
+            setStarted(true);
             setDialog(null);
           }}
         />

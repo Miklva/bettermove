@@ -69,6 +69,11 @@ export function NewGameModal({ initial, onStart, onClose }: Props) {
       >
         Lancer la partie
       </button>
+      {onClose && (
+        <button className="btn ghost modal-cancel" onClick={onClose}>
+          Annuler
+        </button>
+      )}
     </Modal>
   );
 }
