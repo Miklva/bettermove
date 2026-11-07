@@ -51,7 +51,7 @@ import { LegalPage } from './pages/LegalPage';
 import { EventsPage } from './pages/EventsPage';
 import { earn, grant as grantItem } from './shop/store';
 import { itemById } from './shop/items';
-import { apiCall } from './sync/client';
+import { API_BASE, apiCall } from './sync/client';
 import { XP_EVENT } from './economy/rewards';
 import { claimableCount } from './economy/quests';
 import { PERIOD_EVENT } from './achievements/events';
@@ -668,6 +668,10 @@ function Shell() {
     return () => window.removeEventListener('bettermove-remote', on);
   }, []);
   const [toast, setToast] = useState<string | null>(null);
+  // Mesure d'audience anonyme (sans cookie) : une visite par chargement de la page
+  useEffect(() => {
+    fetch(`${API_BASE}/visits/hit`, { method: 'POST', credentials: 'include', keepalive: true }).catch(() => undefined);
+  }, []);
   // Message laisse avant un rechargement (inscription avec e-mail, mot de passe change)
   useEffect(() => {
     const show = () => {

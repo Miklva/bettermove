@@ -16,6 +16,7 @@ import { matchRouter } from './match.js';
 import { profileRouter } from './profile.js';
 import { dailyRouter } from './daily.js';
 import { eventsRouter } from './events.js';
+import { visitsRouter } from './visits.js';
 
 const app = express();
 // Nombre de proxys devant l'API (nginx = 1 ; nginx + Caddy/Cloudflare = 2) pour connaitre la vraie IP
@@ -61,6 +62,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/sync', syncRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/support', supportRouter);
+app.use('/api/visits', visitsRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/online', onlineRouter);
 app.use('/api/daily', dailyRouter);

@@ -251,3 +251,12 @@ CREATE TABLE IF NOT EXISTS support_replies (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS support_replies_support ON support_replies (support_id);
+
+-- Mesure d'audience anonyme : visiteurs uniques par jour (empreinte hachee avec un sel quotidien oublie)
+CREATE TABLE IF NOT EXISTS visits (
+  day     DATE NOT NULL,
+  visitor TEXT NOT NULL,
+  logged  BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (day, visitor)
+);
+DELETE FROM visits WHERE day < current_date - 395;

@@ -34,6 +34,7 @@ adminRouter.get('/stats', async (_req, res) => {
     support,
     sources,
     onlineElo,
+    visits,
   ] = await Promise.all([
     q(
       `SELECT
@@ -89,6 +90,12 @@ adminRouter.get('/stats', async (_req, res) => {
        WHERE NOT deleted AND played_at > now() - interval '30 days' GROUP BY 1 ORDER BY 2 DESC`,
     ),
     q(`SELECT avg(online_rating) AS avg, count(*) AS n, max(online_rating) AS best FROM users WHERE online_games > 0`),
+    q(
+      `SELECT to_char(d, 'YYYY-MM-DD') AS day, count(v.visitor) AS n, count(v.visitor) FILTER (WHERE NOT v.logged) AS anon
+       FROM generate_series(${DAY} - 29, ${DAY}, interval '1 day') d
+       LEFT JOIN visits v ON v.day = d::date
+       GROUP BY d ORDER BY d`,
+    ),
   ]);
   const num = (v) => (v === null || v === undefined ? null : Number(v));
   const t = totals[0] ?? {};
@@ -125,6 +132,7 @@ adminRouter.get('/stats', async (_req, res) => {
     chat: { n: num(chat[0]?.n) ?? 0, authors: num(chat[0]?.authors) ?? 0 },
     support: num(support[0]?.n) ?? 0,
     sources: sources.map((r) => ({ source: r.source, n: num(r.n) })),
+    visits: visits.map((r) => ({ day: r.day, n: num(r.n), anon: num(r.anon) })),
   });
 });
 

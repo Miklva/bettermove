@@ -143,6 +143,15 @@ function Privacy({ support }: { support: ReactNode }) {
         consentement et ne servent jamais à te suivre.
       </p>
 
+      <h2>Mesure d’audience</h2>
+      <p>
+        Pour savoir combien de personnes visitent BetterMove, le serveur compte les visiteurs uniques de chaque jour, sans cookie et
+        sans rien enregistrer sur ton appareil. Il calcule une empreinte à partir de ton adresse IP et de ton navigateur, mélangée à
+        une valeur aléatoire qui change chaque jour et n’est pas conservée : ton adresse IP n’est jamais enregistrée, et on ne peut
+        pas te suivre d’un jour à l’autre. Seuls des chiffres globaux sont affichés (visiteurs par jour, connectés ou non). Les
+        données sont effacées au bout de 13 mois.
+      </p>
+
       <h2>Services tiers</h2>
       <p>
         L’import de parties contacte directement Lichess (lichess.org) ou chess.com (api.chess.com) depuis ton navigateur, avec le

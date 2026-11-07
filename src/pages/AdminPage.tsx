@@ -26,6 +26,7 @@ interface Stats {
   chat: { n: number; authors: number };
   support: number;
   sources: { source: string; n: number }[];
+  visits: { day: string; n: number; anon: number }[];
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -271,7 +272,23 @@ export function AdminPage({ onOpen }: { onOpen: (name: string) => void }) {
       </div>
     );
 
+  const vToday = s.visits.at(-1) ?? { n: 0, anon: 0 };
+  const anon30 = s.visits.reduce((t, d) => t + d.anon, 0);
+  // Inscriptions comptees seulement les jours ou l'audience etait mesuree
+  const measured = new Set(s.visits.filter((d) => d.n > 0).map((d) => d.day));
+  const signupsMeasured = s.signups.filter((d) => measured.has(d.day)).reduce((t, d) => t + d.n, 0);
+  const rate = anon30 ? Math.min(100, Math.round((signupsMeasured / anon30) * 1000) / 10) : 0;
   const kpis: { label: string; value: string; sub?: string; tone?: string }[] = [
+    {
+      label: 'Visiteurs aujourd’hui',
+      value: n0(vToday.n),
+      sub: `${n0(vToday.anon)} non connecté${vToday.anon > 1 ? 's' : ''} · ${n0(vToday.n - vToday.anon)} connecté${vToday.n - vToday.anon > 1 ? 's' : ''}`,
+    },
+    {
+      label: 'Visiteurs non connectés',
+      value: n0(anon30),
+      sub: `30 jours (somme des jours) · ${signupsMeasured} inscription${signupsMeasured > 1 ? 's' : ''}, soit environ ${rate} %`,
+    },
     { label: 'En ligne maintenant', value: n0(s.online.length), sub: s.queue.total ? `${s.queue.total} cherche(nt) un adversaire` : 'actifs ces 3 dernières minutes', tone: 'live' },
     { label: 'Comptes au total', value: n0(s.users), sub: `${n0(s.avatars)} avec photo` },
     { label: 'Nouveaux comptes', value: n0(s.new30), sub: `30 jours · ${n0(s.new7)} sur 7 jours` },
@@ -304,6 +321,11 @@ export function AdminPage({ onOpen }: { onOpen: (name: string) => void }) {
             {k.sub && <span className="muted tiny">{k.sub}</span>}
           </div>
         ))}
+      </section>
+
+      <section className="admin-grid">
+        <DayBars data={s.visits.map((d) => ({ day: d.day, n: d.anon }))} label="Visiteurs non connectés par jour" unit="visiteurs" />
+        <DayBars data={s.visits} label="Visiteurs par jour (connectés ou non)" unit="visiteurs" />
       </section>
 
       <section className="admin-grid">
