@@ -1,0 +1,11 @@
+node_modules
+dist
+server
+public/puzzles
+.puzzles-import-tmp
+*.zst
+*.tar
+.git
+.env
+.idea
+.vscode
