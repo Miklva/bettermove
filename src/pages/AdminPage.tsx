@@ -32,6 +32,8 @@ interface Stats {
   daily: { n: number; players: number; firstTry: number };
   chat: { n: number; authors: number };
   support: number;
+  /** Messages non lus sous les problemes */
+  puzzleTalk?: number;
   sources: { source: string; n: number }[];
   visits: { day: string; n: number; anon: number }[];
 }
@@ -793,9 +795,140 @@ function SupportInbox() {
 }
 
 
+/* ---------------- Pseudos interdits ---------------- */
+
+/** Comptes crees avant le filtre des pseudos : affiche seulement s'il y en a */
+function BadUsernames() {
+  const [list, setList] = useState<{ username: string; createdAt: string; lastSeen: string | null }[]>([]);
+  useEffect(() => {
+    apiCall<{ users: { username: string; createdAt: string; lastSeen: string | null }[] }>('/admin/bad-usernames')
+      .then((r) => setList(r.users))
+      .catch(() => undefined);
+  }, []);
+  if (!list.length) return null;
+  return (
+    <section className="card admin-bad-names">
+      <h3>
+        ⚠️ Pseudos interdits <span className="muted small">{list.length} compte(s) créé(s) avant le filtre</span>
+      </h3>
+      <ul>
+        {list.map((u) => (
+          <li key={u.username}>
+            <a href={`/profil/${encodeURIComponent(u.username)}`}>{u.username}</a>{' '}
+            <span className="muted small">créé le {new Date(u.createdAt).toLocaleDateString()}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/* ---------------- Questions sous les problemes ---------------- */
+
+interface TalkAdminMsg {
+  id: number;
+  puzzleId: string;
+  ref: string | null;
+  parent: number | null;
+  user: string;
+  text: string;
+  censored: boolean;
+  deleted: boolean;
+  seen: boolean;
+  question: string | null;
+  asker: string | null;
+  at: string;
+}
+
+/** Messages laisses sous les problemes : nouveaux en premier, reponse directe possible */
+function PuzzleTalkInbox({ onSeen }: { onSeen: () => void }) {
+  const [list, setList] = useState<TalkAdminMsg[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<number | null>(null);
+  const [draft, setDraft] = useState('');
+  const load = useCallback(() => {
+    apiCall<{ messages: TalkAdminMsg[] }>('/admin/puzzle-talk')
+      .then((r) => setList(r.messages))
+      .catch((e) => setErr(e instanceof Error ? e.message : 'Erreur'));
+  }, []);
+  useEffect(load, [load]);
+  const seen = async (ids?: number[]) => {
+    await apiCall('/admin/puzzle-talk/seen', { method: 'PUT', body: JSON.stringify(ids ? { ids } : {}) });
+    load();
+    onSeen();
+  };
+  const reply = async (m: TalkAdminMsg) => {
+    const parent = m.parent ?? m.id;
+    try {
+      await apiCall(`/puzzle-talk/${encodeURIComponent(m.puzzleId)}`, { method: 'POST', body: JSON.stringify({ text: draft, parent, ref: m.ref }) });
+      setDraft('');
+      setReplyTo(null);
+      await seen([m.id]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Envoi impossible');
+    }
+  };
+  const remove = async (id: number) => {
+    await apiCall(`/puzzle-talk/message/${id}`, { method: 'DELETE' });
+    load();
+  };
+  if (!list) return <section className="card">{err ? <p className="error small">{err}</p> : <p className="muted">Chargement…</p>}</section>;
+  const unseen = list.filter((m) => !m.seen && !m.deleted).length;
+  return (
+    <section className="card admin-support">
+      <h3>
+        🧩 Questions sur les problèmes <span className="muted small">{unseen} non lues · {list.length} messages</span>
+        {unseen > 0 && (
+          <button className="btn ghost small-btn" style={{ marginLeft: 8 }} onClick={() => seen()}>
+            Tout marquer comme lu
+          </button>
+        )}
+      </h3>
+      {err && <p className="error small">{err}</p>}
+      {list.length === 0 && <p className="muted">Aucune question pour l’instant.</p>}
+      <ul className="admin-support-list">
+        {list.map((m) => (
+          <li key={m.id} className={m.seen ? 'handled' : ''}>
+            <div className="admin-support-head">
+              <b>{m.parent ? '↩ Réponse' : '❓ Question'}</b> de <b>{m.user}</b> · problème{' '}
+              {m.ref ? <a href={`/apprendre/problemes/${m.ref}`}>{m.puzzleId}</a> : m.puzzleId} ·{' '}
+              <span className="muted small">{new Date(m.at).toLocaleString()}</span>
+              {m.censored && <span className="muted small"> · filtré</span>}
+              {m.deleted && <span className="muted small"> · supprimé</span>}
+            </div>
+            <div className="admin-support-body">
+              {m.parent && m.question && (
+                <blockquote className="talk-quote">
+                  {m.asker} : {m.question}
+                </blockquote>
+              )}
+              <p style={{ whiteSpace: 'pre-wrap' }}>{m.text}</p>
+              {replyTo === m.id ? (
+                <div className="talk-form">
+                  <textarea value={draft} maxLength={600} rows={3} onChange={(e) => setDraft(e.target.value)} placeholder="Ta réponse (le joueur la reçoit en pop-up)" />
+                  <div className="talk-actions">
+                    <button className="btn ghost" onClick={() => setReplyTo(null)}>Annuler</button>
+                    <button className="btn primary" disabled={draft.trim().length < 3} onClick={() => reply(m)}>Répondre</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="row">
+                  {!m.deleted && <button className="btn small-btn" onClick={() => { setReplyTo(m.id); setDraft(''); }}>Répondre</button>}
+                  {!m.seen && <button className="btn ghost small-btn" onClick={() => seen([m.id])}>Marquer comme lu</button>}
+                  {!m.deleted && <button className="btn ghost small-btn danger" onClick={() => remove(m.id)}>Supprimer</button>}
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /* ---------------- Page ---------------- */
 
-type Tab = 'overview' | 'audience' | 'support';
+type Tab = 'overview' | 'audience' | 'support' | 'talk';
 
 /** Carte chiffre cliquable */
 function Kpi({ label, value, sub, tone, onClick }: { label: string; value: string; sub?: string; tone?: string; onClick?: () => void }) {
@@ -919,6 +1052,9 @@ export function AdminPage({ onOpen }: { onOpen: (name: string) => void }) {
         <button className={`chip ${tab === 'support' ? 'selected' : ''}`} onClick={() => setTab('support')}>
           ✉️ Support
         </button>
+        <button className={`chip ${tab === 'talk' ? 'selected' : ''}`} onClick={() => setTab('talk')}>
+          🧩 Questions sur les problèmes{s.puzzleTalk ? <span className="badge">{s.puzzleTalk}</span> : null}
+        </button>
         <button className="chip" onClick={L('users')}>
           👥 Tous les comptes ({n0(s.users)})
         </button>
@@ -926,9 +1062,11 @@ export function AdminPage({ onOpen }: { onOpen: (name: string) => void }) {
 
       {tab === 'audience' && <AudienceTab visits={s.visits} />}
       {tab === 'support' && <SupportInbox />}
+      {tab === 'talk' && <PuzzleTalkInbox onSeen={load} />}
 
       {tab === 'overview' && (
         <>
+          <BadUsernames />
           <section className="admin-kpis">
             <Kpi
               label="Visiteurs aujourd’hui"
@@ -1030,6 +1168,7 @@ export function AdminPage({ onOpen }: { onOpen: (name: string) => void }) {
                 />
                 <Activity icon="💬" label="Messages du salon" value={`${n0(s.chat.n)} · ${n0(s.chat.authors)} auteurs`} onClick={L('chat')} />
                 <Activity icon="✉️" label="Demandes au support" value={n0(s.support)} onClick={() => setTab('support')} />
+                <Activity icon="🧩" label="Questions sur les problèmes (non lues)" value={n0(s.puzzleTalk ?? 0)} onClick={() => setTab('talk')} />
               </ul>
             </div>
             <div className="card admin-list span2">

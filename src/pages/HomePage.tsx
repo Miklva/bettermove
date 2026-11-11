@@ -323,6 +323,7 @@ export function HomePage({ player, onNavigate, socialBadge }: Props) {
                 puzzle={puzzle}
                 error={puzzleError}
                 allowSkip={false}
+                talk
                 onResult={() => undefined}
                 onMistake={() => event('mistake')}
                 onHint={() => {

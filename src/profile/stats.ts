@@ -42,6 +42,8 @@ export interface ProfileData {
   achievements: Record<string, string>;
   repertoire: string[];
   owned: number;
+  /** Skins portes (absent sur un ancien serveur) */
+  equipped?: { pieces: string; sounds: string; board: string; boardOwned: boolean };
   onlineElo: { rating: number; games: number } | null;
   onlineRecord: WDL;
   recentOnline: { opponent: string; result: R; delta: number | null; at: string }[];

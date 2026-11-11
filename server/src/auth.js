@@ -3,7 +3,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
-import { containsBanned, isAdmin } from './moderation.js';
+import { forbiddenUsername, isAdmin } from './moderation.js';
 import { applyReferral } from './events.js';
 import crypto from 'node:crypto';
 import { ACCOUNT_MAILS, SITE_URL, accountEmail, accountMailReady, reqLang, sendMail } from './mail.js';
@@ -97,7 +97,7 @@ authRouter.post('/register', async (req, res) => {
   const { username, password } = req.body ?? {};
   if (typeof username !== 'string' || !USERNAME.test(username))
     return res.status(400).json({ error: 'Pseudo invalide : 3 a 24 caracteres (lettres, chiffres, . _ -)' });
-  if (containsBanned(username)) return res.status(400).json({ error: 'Ce pseudo contient un mot interdit' });
+  if (forbiddenUsername(username)) return res.status(400).json({ error: 'Ce pseudo contient un mot interdit' });
   if (typeof password !== 'string' || password.length < 8)
     return res.status(400).json({ error: 'Mot de passe trop court (8 caracteres minimum)' });
   if (password.length > 128) return res.status(400).json({ error: 'Mot de passe trop long (128 caracteres maximum)' });

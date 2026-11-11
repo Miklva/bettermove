@@ -38,6 +38,7 @@ import { getLevel, isFreshProfile, LEVELS, setLevel, type Level } from './onboar
 import { openLessonNext } from './pages/LessonsPage';
 import { Avatar, reconcileAvatar } from './profile/avatar';
 import { isAdmin } from './sync/client';
+import { OPEN_ACCOUNT_EVENT, talk, type TalkReply } from './puzzles/talk';
 import { RushPage } from './pages/RushPage';
 import { TipsPage } from './pages/TipsPage';
 import { TeacherPage } from './pages/TeacherPage';
@@ -261,6 +262,14 @@ function Shell() {
   // Fenetre d'invitation : montree une fois par session, avant l'accueil des nouveaux arrivants
   const [invitePopupSeen, setInvitePopupSeen] = useState(() => sessionStorage.getItem('bettermove.invitePopup') === '1');
   const [accountFromInvite, setAccountFromInvite] = useState(false);
+  useEffect(() => {
+    const on = () => {
+      setAccountMode('login');
+      setAccountOpen(true);
+    };
+    window.addEventListener(OPEN_ACCOUNT_EVENT, on);
+    return () => window.removeEventListener(OPEN_ACCOUNT_EVENT, on);
+  }, []);
   const closeInvitePopup = (signup: boolean) => {
     sessionStorage.setItem('bettermove.invitePopup', '1');
     setInvitePopupSeen(true);
@@ -334,6 +343,16 @@ function Shell() {
   const [challengePop, setChallengePop] = useState<{ id: number; from: string } | null>(null);
   // Revanche proposee par un adversaire alors qu'on n'est plus sur la partie : pop-up accepter / refuser
   const [rematchPop, setRematchPop] = useState<{ gameId: number; from: string } | null>(null);
+  // Reponse a une question posee sous un probleme
+  const [talkPop, setTalkPop] = useState<TalkReply | null>(null);
+  const talkShown = useRef(new Set<number>());
+  const closeTalkPop = (open: boolean) => {
+    const cur = talkPop;
+    setTalkPop(null);
+    if (!cur) return;
+    void talk.read([cur.id]).catch(() => undefined);
+    if (open && cur.ref) navigate(`/apprendre/problemes/${cur.ref}`);
+  };
   const routeGameRef = useRef<number | null>(null);
   routeGameRef.current = routeGame;
   const seenNotif = useRef<{ challenges: Set<number>; games: Set<number>; rematch: Set<number>; init: boolean }>({
@@ -350,6 +369,13 @@ function Shell() {
         const n = await social.notifications();
         if (stop) return;
         setNotif(n);
+        // Reponse a ma question sous un probleme (aussi celles recues pendant l'absence)
+        const reply = (n.puzzleReplies ?? []).find((r) => !talkShown.current.has(r.id));
+        if (reply) {
+          talkShown.current.add(reply.id);
+          setTalkPop((cur) => cur ?? reply);
+          sounds.success();
+        }
         const seen = seenNotif.current;
         // Premier passage : on memorise l'existant sans notifier
         if (!seen.init) {
@@ -956,6 +982,7 @@ function Shell() {
           {sync.user && isAdmin() && (
             <button className={`icon-btn ${mode === 'admin' ? 'active' : ''}`} onClick={() => setMode('admin')} title={t("Administration")}>
               <I.Wrench size={19} aria-hidden />
+              {!!notif?.adminTalk && <span className="badge">{notif.adminTalk}</span>}
             </button>
           )}
           <div className="help-wrap">
@@ -1194,6 +1221,22 @@ function Shell() {
             ×
           </button>
         </div>
+      )}
+      {talkPop && (
+        <Modal title={t("💬 Réponse à ta question")} onClose={() => closeTalkPop(false)}>
+          <p className="muted small">{t("Ta question sur le problème {id} :", { id: talkPop.puzzleId })}</p>
+          <blockquote className="talk-quote">{talkPop.question}</blockquote>
+          <p>
+            <b>{talkPop.from}</b> {t("a répondu :")}
+          </p>
+          <blockquote className="talk-quote answer">{talkPop.text}</blockquote>
+          <div className="row">
+            {talkPop.ref && (
+              <button className="btn primary" onClick={() => closeTalkPop(true)}>{t("Voir le problème")}</button>
+            )}
+            <button className="btn" onClick={() => closeTalkPop(false)}>{t("Merci !")}</button>
+          </div>
+        </Modal>
       )}
       {rematchPop && (
         <Modal title={t("🔁 Revanche ?")} onClose={() => setRematchPop(null)}>

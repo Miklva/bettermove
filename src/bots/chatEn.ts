@@ -185,6 +185,7 @@ export const COMMON_EN: Lines = {
   nice: ['Thanks, you too!', 'That’s kind.'],
   myBlunder: ['It happens to everyone. Breathe and look for the next move.', 'A mistake isn’t a defeat.'],
   botBlunderRemark: ['Hmm, yes, I could have done better.', 'Nobody’s perfect.'],
+  botHung: ['Oops, I left {piece} hanging.', 'Well spotted, that square was attacked.'],
   announceCheck: ['I see, I see.', 'Yes, I noticed.'],
   resign: ['Resign? No way!', 'We play until the end.'],
 };
@@ -315,7 +316,8 @@ export const PERSONA_LINES_EN: Record<string, Lines> = {
     tookQueen: ['Your queen is mine!'],
     lostQueen: ['Oh no, my queen…'],
     userBlunder: ['Oh, are you sure about that move? Too late, I’m taking it!', 'Thanks for the piece!'],
-    botBlunder: ['Oh shoot, I left it hanging…', 'Well spotted, I missed that.'],
+    botBlunder: ['Oh shoot, {piece} was hanging…', 'Well spotted, I didn’t see {piece} was attacked.'],
+    botHung: ['Oops, I left {piece} hanging all by myself…', 'Ouch, I moved {piece} to an attacked square. Nice one!'],
     gotCheck: ['Oops, check!'],
     userCastle: ['Good idea to put your king in safety.'],
     openE4: ['e4! A classic.'],

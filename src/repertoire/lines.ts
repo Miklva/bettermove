@@ -256,6 +256,75 @@ export const REP_OPENINGS: RepOpening[] = [
       'd4 Nf6 c4 g6 Nc3 Bg7 e4 d6 f3 O-O',
     ],
   },
+  // ------------------------------------------------------------------ Ajouts (lignes verifiees avec Stockfish)
+  {
+    id: 'w-vienna',
+    name: 'Partie viennoise',
+    color: 'w',
+    against: '1…e5',
+    level: 'intermédiaire',
+    ideas: 'Le cavalier sort en c3 avant de jouer f4 : on attaque e5 et on ouvre la colonne f pour une attaque sur l’aile roi.',
+    lines: [
+      'e4 e5 Nc3 Nf6 Bc4 Nc6 d3 Bc5 f4 d6 Nf3 O-O',
+      'e4 e5 Nc3 Nc6 Bc4 Bc5 Qg4 Qf6 Nd5',
+      'e4 e5 Nc3 Nf6 Bc4 Nxe4 Qh5 Nd6 Qxe5+ Qe7 Qxe7+ Bxe7 Bb3',
+    ],
+  },
+  {
+    id: 'w-english',
+    name: 'Partie anglaise',
+    color: 'w',
+    against: '1…e5 / 1…c5 / 1…Cf6',
+    level: 'avancé',
+    ideas: '1.c4 contrôle d5 depuis le côté. Fou en g2, cavalier en c3, roque : un jeu de position souple où l’on choisit plus tard où frapper.',
+    lines: [
+      'c4 e5 Nc3 Nf6 g3 d5 cxd5 Nxd5 Bg2 Nb6 Nf3 Nc6 O-O Be7',
+      'c4 c5 Nc3 Nc6 g3 g6 Bg2 Bg7 Nf3 e6 O-O Nge7',
+      'c4 Nf6 Nc3 e6 e4 d5 e5 d4 exf6 dxc3 bxc3 Qxf6 d4',
+      'c4 e6 Nc3 d5 d4 Nf6 Nf3',
+    ],
+  },
+  {
+    id: 'b-nimzo',
+    name: 'Défense nimzo-indienne',
+    color: 'b',
+    against: '1.d4',
+    level: 'avancé',
+    ideas: 'Fb4 cloue le cavalier c3 et empêche e4. Les Noirs sont prêts à donner la paire de fous pour abîmer les pions blancs.',
+    lines: [
+      'd4 Nf6 c4 e6 Nc3 Bb4 e3 O-O Bd3 d5 Nf3 c5 O-O Nc6',
+      'd4 Nf6 c4 e6 Nc3 Bb4 Qc2 O-O a3 Bxc3+ Qxc3 b6 Bg5 Bb7',
+      'd4 Nf6 c4 e6 Nc3 Bb4 Bg5 h6 Bh4 c5 d5 d6',
+      'd4 Nf6 c4 e6 Nf3 b6 g3 Bb7 Bg2 Be7 O-O O-O',
+    ],
+  },
+  {
+    id: 'b-vs-english',
+    name: 'Contre l’Anglaise : 1…e5',
+    color: 'b',
+    against: '1.c4',
+    level: 'intermédiaire',
+    ideas: 'Une Sicilienne inversée : les Noirs prennent le centre avec e5 et d5, se développent vite et reculent le cavalier en b6 si on le chasse.',
+    lines: [
+      'c4 e5 Nc3 Nf6 g3 d5 cxd5 Nxd5 Bg2 Nb6 Nf3 Nc6 O-O Be7 d3 O-O',
+      'c4 e5 g3 Nf6 Bg2 c6 Nf3 e4 Nd4 d5 cxd5 Qb6',
+      'c4 e5 Nf3 e4 Nd4 Nc6 Nc2 Nf6 Nc3 d5',
+    ],
+  },
+  {
+    id: 'b-dragon',
+    name: 'Sicilienne Dragon',
+    color: 'b',
+    against: '1.e4',
+    level: 'avancé',
+    ideas: 'Le fou g7 « crache du feu » sur la grande diagonale. Contre le roque opposé des Blancs, contre-attaque rapide sur l’aile dame (colonne c, ...b5).',
+    lines: [
+      'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be2 Bg7 O-O O-O Be3 Nc6 Nb3 Be6',
+      'e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 g6 Be3 Bg7 f3 O-O Qd2 Nc6 O-O-O d5',
+      'e4 c5 Nf3 d6 d4 cxd4 Qxd4 Nc6 Bb5 Bd7 Bxc6 Bxc6 Nc3 Nf6',
+      'e4 c5 Nf3 d6 Bb5+ Bd7 Bxd7+ Qxd7 O-O Nc6 c3 Nf6',
+    ],
+  },
 ];
 
 export const repOpening = (id: string) => REP_OPENINGS.find((o) => o.id === id);

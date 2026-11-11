@@ -15,6 +15,7 @@ import { leaderboardRouter } from './leaderboard.js';
 import { matchRouter } from './match.js';
 import { profileRouter } from './profile.js';
 import { dailyRouter } from './daily.js';
+import { puzzleTalkRouter } from './puzzleTalk.js';
 import { eventsRouter } from './events.js';
 import { visitsRouter } from './visits.js';
 
@@ -73,6 +74,7 @@ app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/match', matchRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/events', eventsRouter);
+app.use('/api/puzzle-talk', puzzleTalkRouter);
 
 app.use((err, _req, res, _next) => {
   // Requetes mal formees : refus propre, sans bruit dans les journaux

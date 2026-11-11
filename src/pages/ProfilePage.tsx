@@ -17,6 +17,12 @@ import { PERIODS, StatDetail, STATS, type Period, type StatId } from '../profile
 import { PROVISIONAL_GAMES, provisionalHelp } from '../rating/elo';
 
 import { locale, t, tmap, tn } from '../i18n';
+import { BoardPreview, PiecesPreview } from './ShopPage';
+import { itemById } from '../shop/items';
+import { useShop } from '../shop/store';
+import { useSettings } from '../settings/settings';
+import { BOARD_THEMES, DEFAULT_BOARD_THEME } from '../themes/boards';
+import { previewSound } from '../lib/sounds';
 const SOURCE: Record<string, string> = tmap({
   bot: '🤖 Bots',
   local: '👥 Sur écran',
@@ -38,6 +44,50 @@ function ago(iso?: string | null) {
   const h = Math.round(m / 60);
   if (h < 48) return t('vu il y a {n} h', { n: h });
   return t('vu il y a {n} jours', { n: Math.round(h / 24) });
+}
+
+/** Skins portes par le joueur : pieces, plateau, sons (avec un petit extrait a ecouter) */
+function Gear({ pieces, board, boardOwned, sounds }: { pieces: string; board: string; boardOwned: boolean; sounds: string }) {
+  const theme = BOARD_THEMES.find((x) => x.id === board && (!x.itemId || boardOwned)) ?? DEFAULT_BOARD_THEME;
+  const [playing, setPlaying] = useState(false);
+  const listen = () => {
+    setPlaying(true);
+    previewSound(sounds, 'move');
+    window.setTimeout(() => previewSound(sounds, 'cap-n'), 450);
+    window.setTimeout(() => previewSound(sounds, 'cap-q'), 950);
+    window.setTimeout(() => setPlaying(false), 1500);
+  };
+  const name = (id: string) => itemById(id)?.name ?? id;
+  return (
+    <section className="card prof-gear">
+      <div className="tc-label">{t("🎨 Équipement")}</div>
+      <div className="prof-gear-grid">
+        <div className="prof-gear-item">
+          <div className="prof-gear-visual">
+            <PiecesPreview id={pieces} />
+          </div>
+          <span className="muted tiny">{t("Pièces")}</span>
+          <strong>{name(pieces)}</strong>
+        </div>
+        <div className="prof-gear-item">
+          <div className="prof-gear-visual">
+            <BoardPreview light={theme.light} dark={theme.dark} texture={theme.texture} />
+          </div>
+          <span className="muted tiny">{t("Plateau")}</span>
+          <strong>{t(theme.name)}</strong>
+        </div>
+        <div className="prof-gear-item">
+          <div className="prof-gear-visual">
+            <button className={`btn prof-gear-play ${playing ? 'playing' : ''}`} onClick={listen} aria-label={t("Écouter le pack de sons")}>
+              {playing ? '🔊' : '▶'}
+            </button>
+          </div>
+          <span className="muted tiny">{t("Sons")}</span>
+          <strong>{name(sounds)}</strong>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 /** Barre victoires / nulles / defaites */
@@ -99,6 +149,8 @@ export function ProfilePage({ username, player, onAccount, onOpen }: Props) {
   const mine = username === null || (!!sync.user && username.toLowerCase() === sync.user.toLowerCase());
   const [data, setData] = useState<ProfileData | null>(() => (mine ? localProfile(sync.user ?? 'Toi', player.profile) : null));
   const [err, setErr] = useState<string | null>(null);
+  const shop = useShop();
+  const { settings: mySettings } = useSettings();
 
   useEffect(() => {
     setErr(null);
@@ -155,6 +207,10 @@ export function ProfilePage({ username, player, onAccount, onOpen }: Props) {
   if (!data) return <div className="profile-page"><p className="muted center">{t("Chargement du profil…")}</p></div>;
 
   const p = data.profile;
+  // Mon profil : ce que je porte dans ce navigateur ; un autre joueur : ce que renvoie le serveur
+  const gear = mine
+    ? { pieces: shop.equipped.pieces, sounds: shop.equipped.sounds, board: mySettings.boardTheme, boardOwned: shop.owned.includes(`board-${mySettings.boardTheme}`) }
+    : (data.equipped ?? null);
   const lv = levelFromXp(p?.xp ?? 0);
   const stars = p ? Object.values(p.lessons).reduce((s, l) => s + (l.stars ?? 0), 0) : 0;
   const allLessons = CHAPTERS.flatMap((c) => [...c.lessons, ...(c.advanced ?? [])]);
@@ -363,6 +419,8 @@ export function ProfilePage({ username, player, onAccount, onOpen }: Props) {
           )}
         </div>
       </section>
+
+      {gear && <Gear {...gear} />}
 
       <section className="card prof-gallery">
         <div className="prof-gallery-head">

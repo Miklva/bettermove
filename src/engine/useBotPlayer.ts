@@ -57,7 +57,8 @@ export function useBotPlayer(g: Game, bot: Bot | null) {
         const uci = (m?: { from: string; to: string }) => (m ? m.from + m.to : undefined);
         const lastOpp = uci(cur.moves[cur.moves.length - 1]);
         const lastOwn = uci(cur.moves[cur.moves.length - 2]);
-        const { move } = chooseMove(fen, bot, lines, { ply, mind: mind.current, lastOpp, lastOwn });
+        const lastOppCapture = !!cur.moves[cur.moves.length - 1]?.captured;
+        const { move } = chooseMove(fen, bot, lines, { ply, mind: mind.current, lastOpp, lastOwn, lastOppCapture });
         const wait = thinkTime({
           remainingMs,
           incrementMs: cur.settings.timeControl.increment * 1000,

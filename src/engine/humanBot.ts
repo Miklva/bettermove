@@ -14,7 +14,7 @@
 // surtout de la difficulte de la position ; le manque de temps augmente fortement les gaffes sous
 // ~10 secondes ; de petites imprecisions en entrainent d'autres (tilt) ; les gaffes des joueurs humains
 // sont des coups "naturels", pas des coups au hasard.
-import { Chess, type Move } from 'chess.js';
+import { Chess, type Color, type Move, type Square } from 'chess.js';
 import type { EngineLine } from './stockfish';
 import { winChance } from './stockfish';
 import type { Bot } from '../bots/roster';
@@ -207,6 +207,8 @@ export interface MoveContext {
   /** Dernier coup adverse et dernier coup du bot (ex. "e2e4") */
   lastOpp?: string;
   lastOwn?: string;
+  /** Le dernier coup adverse etait une prise */
+  lastOppCapture?: boolean;
 }
 
 /** Le bot "voit"-il ce coup ? Les joueurs faibles regardent surtout pres de l'action. */
@@ -240,6 +242,62 @@ function bias(m: Move, bot: Bot, t: Traits, ctx: MoveContext, enemyKing: string 
   if (bot.rating < 600 && opening && m.piece === 'p' && 'ah'.includes(m.from[0])) w *= 1.6;
   return w;
 }
+
+/* ---------------- Erreurs "trop grosses" pour etre humaines ---------------- */
+// Meme a 600, un joueur reprend une piece qu'on vient de lui prendre, ne pose pas une piece la ou un pion
+// la mange et sauve sa dame attaquee. Ces coups-la donnent l'impression que le bot ne connait pas
+// les regles : on les ecarte (presque toujours) des gaffes et on les penalise fortement sinon.
+
+const ATK: Record<string, number> = { ...VAL, k: 100 };
+const other = (c: Color): Color => (c === 'w' ? 'b' : 'w');
+
+/** La piece sur `sq` peut-elle etre prise avec gain (attaquant moins cher, ou piece non defendue) ? */
+function hanging(chess: Chess, sq: Square): boolean {
+  const piece = chess.get(sq);
+  if (!piece || piece.type === 'k') return false;
+  const attackers = chess.attackers(sq, other(piece.color));
+  if (!attackers.length) return false;
+  if (attackers.some((a) => ATK[chess.get(a)!.type] < VAL[piece.type])) return true;
+  return chess.attackers(sq, piece.color).length === 0;
+}
+
+interface Obvious {
+  /** Case ou l'adversaire vient de prendre une piece qu'on peut reprendre sans perte */
+  recapture: Square | null;
+}
+
+/** Ce que n'importe quel joueur remarque avant de jouer */
+function obviousFacts(chess: Chess, legal: Move[], ctx: MoveContext): Obvious {
+  const sq = ctx.lastOpp?.slice(2, 4) as Square | undefined;
+  if (!sq || !ctx.lastOppCapture) return { recapture: null };
+  const target = chess.get(sq);
+  if (!target || VAL[target.type] < 3) return { recapture: null };
+  // Une reprise qui ne perd pas de materiel : piece moins chere, ou case non defendue
+  const ok = legal.some((m) => m.to === sq && (VAL[m.piece] <= VAL[target.type] || chess.attackers(sq, target.color).length === 0));
+  return { recapture: ok ? sq : null };
+}
+
+/** Ce coup ignore-t-il quelque chose d'evident (reprise, piece posee en prise, dame/tour qui tombe) ? */
+function obviousMiss(chess: Chess, m: Move, facts: Obvious): boolean {
+  if (facts.recapture && m.to !== facts.recapture) return true;
+  chess.move({ from: m.from, to: m.to, promotion: m.promotion });
+  try {
+    // Piece posee sur une case ou elle se fait prendre (sauf si on vient de prendre aussi gros)
+    if (m.piece !== 'p' && m.piece !== 'k' && hanging(chess, m.to) && !(m.captured && VAL[m.captured] >= VAL[m.piece])) return true;
+    // Dame ou tour laissee en prise
+    for (const row of chess.board()) {
+      for (const pc of row) {
+        if (pc && pc.color === m.color && (pc.type === 'q' || pc.type === 'r') && hanging(chess, pc.square)) return true;
+      }
+    }
+    return false;
+  } finally {
+    chess.undo();
+  }
+}
+
+/** Probabilite d'eviter une erreur evidente : quasi certaine des 1000 Elo, tres forte meme a 400 */
+const avoidObvious = (rating: number) => (rating >= 1000 ? 1 : 0.9 + (0.1 * Math.max(0, rating - 400)) / 600);
 
 export interface Choice {
   move: string;
@@ -277,12 +335,34 @@ export function chooseMove(fen: string, bot: Bot, lines: EngineLine[], ctx: Move
   // Etat d'esprit -> temperature et risque de gaffe
   const relaxing = bot.rating < 1800 ? mind.confidence * t.relax : 0;
   const temp = p.temperature * (1 + 1.4 * mind.tilt + 1.2 * mind.panic + relaxing + 0.6 * losing);
-  const blunderRisk = Math.min(0.5, p.blunder * (1 + 2 * mind.tilt + 2 * mind.panic + losing + relaxing * 0.8));
+  const blunderRisk = Math.min(0.3, p.blunder * (1 + 2 * mind.tilt + 2 * mind.panic + losing + relaxing * 0.8));
+
+  // Erreurs evidentes a eviter (reprise oubliee, piece posee en prise, dame laissee attaquee)
+  const facts = obviousFacts(chess, legal, ctx);
+  const missMemo = new Map<string, boolean>();
+  const miss = (m: Move) => {
+    if (!missMemo.has(m.lan)) missMemo.set(m.lan, obviousMiss(chess, m, facts));
+    return missMemo.get(m.lan)!;
+  };
+  const careful = Math.random() < avoidObvious(bot.rating);
+  // Reprendre une piece qui vient d'etre prise : reflexe acquis des 500 Elo, jamais oublie
+  const mustRecapture = facts.recapture !== null && bot.rating >= 500;
+  const isRecapture = (m: Move) => m.to === facts.recapture;
 
   // Gaffe "naturelle" : un coup qui a l'air bien (prise, echec, coup pres de l'action), pas un coup au hasard
   if (Math.random() < blunderRisk) {
-    const pool = legal.filter((m) => seen(m, ctx, bot.rating, focus));
-    const cands = pool.length ? pool : legal;
+    let pool = legal.filter((m) => seen(m, ctx, bot.rating, focus));
+    if (!pool.length) pool = legal;
+    if (mustRecapture) {
+      const r = legal.filter(isRecapture);
+      if (r.length) pool = r;
+    }
+    // Une gaffe humaine est une erreur subtile (menace lointaine, mauvais calcul), pas un oubli des regles
+    if (careful) {
+      const subtle = pool.filter((m) => !miss(m));
+      if (subtle.length) pool = subtle;
+    }
+    const cands = pool;
     const ws = cands.map((m) => bias(m, bot, t, ctx, enemyKing) * (m.captured ? 1.5 : 1));
     return { move: pickWeighted(cands, ws).lan, why: 'blunder' };
   }
@@ -293,6 +373,11 @@ export function chooseMove(fen: string, bot: Bot, lines: EngineLine[], ctx: Move
     const visible = cands.filter((l) => seen(byUci.get(l.move)!, ctx, bot.rating, focus));
     if (visible.length) cands = visible;
   }
+  if (mustRecapture) {
+    const rc = cands.filter((l) => isRecapture(byUci.get(l.move)!));
+    // Sauf si le moteur voit bien mieux ailleurs (mat, prise plus grosse...)
+    if (rc.length && best - Math.max(...rc.map((l) => winChance(l.cp))) < 0.15) cands = rc;
+  }
   const losingBadly = evalCp <= -300;
   const ahead = evalCp >= 250;
   let why: Choice['why'] = 'human';
@@ -301,6 +386,8 @@ export function chooseMove(fen: string, bot: Bot, lines: EngineLine[], ctx: Move
     const m = byUci.get(l.move)!;
     const loss = Math.max(0, best - winChance(l.cp) - t.sacrifice * ((m.san.includes('+') || (enemyKing && dist(m.to, enemyKing) <= 2)) ? 1 : 0));
     let w = Math.exp(-loss / temp) * bias(m, bot, t, ctx, enemyKing);
+    // Coup qui perd du materiel de facon evidente : un humain de ce niveau ne le joue presque jamais
+    if (careful && loss > 0.02 && miss(m)) w *= 0.03;
     // Piece gratuite : les joueurs qui "punissent" ne la ratent pas
     if (m.captured && VAL[m.captured] >= 3 && loss < 0.05) w *= t.punish;
     // En avance : les bons joueurs echangent pour simplifier

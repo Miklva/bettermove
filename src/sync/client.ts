@@ -32,6 +32,7 @@ const SYNCED = new Set([
   'bettermove.repertoire.v1',
   'bettermove.tips.v1',
   'bettermove.lessonsFolded.v1',
+  'bettermove.mastery.v1',
   'bettermove.settings.v1',
   'bettermove.puzzlesSeen',
   'bettermove.recordedGames',

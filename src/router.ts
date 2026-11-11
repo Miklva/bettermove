@@ -97,8 +97,13 @@ export function useRouteSync<T>(
 ) {
   const segs = useSegments();
   const seg = segs[index];
+  // L'adresse a assez de segments pour porter celui-ci
+  const ready = segs.length >= index;
   const first = useRef(true);
   const firstIn = useRef(true);
+  const wasEnabled = useRef(enabled);
+  // Derniere valeur et activation vues par l'effet etat -> URL
+  const seen = useRef<{ value: T; enabled: boolean } | null>(null);
   const latest = useRef({ toSlug, fromSlug, setValue, value });
   latest.current = { toSlug, fromSlug, setValue, value };
 
@@ -106,9 +111,14 @@ export function useRouteSync<T>(
   useEffect(() => {
     const wasFirst = firstIn.current;
     firstIn.current = false;
+    // Synchronisation qui vient de s'activer (ex. ouverture d'une conversation depuis le salon) :
+    // l'URL n'a pas encore le segment, c'est l'etat qui doit gagner (sinon les deux effets se
+    // renvoient la valeur a l'infini)
+    const justEnabled = enabled && !wasEnabled.current;
+    wasEnabled.current = enabled;
     if (!enabled) return;
     if (seg === undefined) {
-      if (!wasFirst && empty && latest.current.toSlug(latest.current.value) !== null) latest.current.setValue(empty.value);
+      if (!wasFirst && !justEnabled && empty && latest.current.toSlug(latest.current.value) !== null) latest.current.setValue(empty.value);
       return;
     }
     const v = latest.current.fromSlug(seg);
@@ -118,7 +128,12 @@ export function useRouteSync<T>(
 
   // Etat -> URL
   useEffect(() => {
+    // On n'ecrit l'URL que si l'etat a vraiment change : un effet rejoue (StrictMode) ou un rendu
+    // provoque par un changement d'URL ne doit pas reimposer l'ancienne valeur (va-et-vient infini)
+    const changed = !seen.current || !Object.is(seen.current.value, value) || seen.current.enabled !== enabled;
+    seen.current = { value, enabled };
     if (!enabled) return;
+    if (!first.current && !changed) return;
     const cur = segmentsOf(getPath());
     const urlSeg = cur[index];
     const wasFirst = first.current;
@@ -135,10 +150,14 @@ export function useRouteSync<T>(
       return;
     }
     if (urlSeg === slug) return;
-    if (cur.length < index) return; // page pas encore a la bonne adresse
+    if (cur.length < index) {
+      // Page pas encore a la bonne adresse : on reessaie quand elle y sera (voir `ready`)
+      seen.current = null;
+      return;
+    }
     navigate(pathOf([...cur.slice(0, index), slug]), wasFirst || urlSeg !== undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, enabled]);
+  }, [value, enabled, ready]);
 }
 
 /** Variante pour une liste fermee de valeurs : { valeur: 'segment' } */

@@ -6,7 +6,7 @@ import { JWT_SECRET } from './auth.js';
 
 export const profileRouter = Router();
 
-const KEYS = ['bettermove.profile.v1', 'bettermove.achievements.v1', 'bettermove.repertoire.v1', 'bettermove.shop.v1'];
+const KEYS = ['bettermove.profile.v1', 'bettermove.achievements.v1', 'bettermove.repertoire.v1', 'bettermove.shop.v1', 'bettermove.settings.v1'];
 
 function viewer(req) {
   try {
@@ -129,6 +129,20 @@ async function rankOf(sql, params) {
   return rows[0]?.rank ? Number(rows[0].rank) : null;
 }
 
+/** Skins portes : pieces et sons de la boutique, plateau des parametres (seulement s'ils sont possedes) */
+function equippedOf(shop, settings) {
+  const owned = new Set(Array.isArray(shop?.owned) ? shop.owned : []);
+  const pick = (id, fallback) => (typeof id === 'string' && (owned.has(id) || id === fallback) ? id : fallback);
+  const board = typeof settings?.boardTheme === 'string' ? settings.boardTheme : 'bois';
+  return {
+    pieces: pick(shop?.equipped?.pieces, 'pieces-classic'),
+    sounds: pick(shop?.equipped?.sounds, 'sounds-classic'),
+    board,
+    // Plateau de la boutique : compte seulement s'il a ete achete (le client retombe sinon sur le plateau de base)
+    boardOwned: owned.has(`board-${board}`),
+  };
+}
+
 profileRouter.get('/:name', async (req, res) => {
   const { rows: users } = await pool.query(
     `SELECT id, username, created_at, last_seen, avatar IS NOT NULL AS has_avatar, online_rating, online_games
@@ -210,6 +224,7 @@ profileRouter.get('/:name', async (req, res) => {
     achievements: kv['bettermove.achievements.v1'] ?? {},
     repertoire: kv['bettermove.repertoire.v1']?.chosen ?? [],
     owned: Array.isArray(shop?.owned) ? shop.owned.length : 0,
+    equipped: equippedOf(shop, kv['bettermove.settings.v1']),
     // Pas encore de partie classee : meme Elo de depart que sur la page Contre le monde (Elo bots borne, sinon 1200)
     onlineElo:
       u.online_rating !== null

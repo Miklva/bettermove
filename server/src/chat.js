@@ -7,6 +7,9 @@ import { censor, isAdmin } from './moderation.js';
 export const chatRouter = Router();
 
 const MAX_LEN = 400;
+// Un salon par langue de l'app
+const ROOMS = ['fr', 'en', 'es', 'pt', 'de', 'ru'];
+const roomOf = (v) => (ROOMS.includes(String(v)) ? String(v) : 'fr');
 
 // Anti-spam et sanctions en memoire : 1 message toutes les 2 s, mute de 10 min apres 3 avertissements
 const lastPost = new Map();
@@ -25,9 +28,10 @@ const row = (r) => ({
 /** Derniers messages, ou ceux apres `after` (id) pour le rafraichissement */
 chatRouter.get('/', async (req, res) => {
   const after = Number(req.query.after ?? 0) || 0;
+  const room = roomOf(req.query.room);
   const { rows } = after
-    ? await pool.query('SELECT * FROM chat_messages WHERE id > $1 ORDER BY id ASC LIMIT 200', [after])
-    : await pool.query('SELECT * FROM (SELECT * FROM chat_messages ORDER BY id DESC LIMIT 100) t ORDER BY id ASC');
+    ? await pool.query('SELECT * FROM chat_messages WHERE room = $2 AND id > $1 ORDER BY id ASC LIMIT 200', [after, room])
+    : await pool.query('SELECT * FROM (SELECT * FROM chat_messages WHERE room = $1 ORDER BY id DESC LIMIT 100) t ORDER BY id ASC', [room]);
   // Messages supprimes depuis : on renvoie les ids pour les retirer cote client
   const { rows: del } = await pool.query(
     "SELECT id FROM chat_messages WHERE deleted AND created_at > now() - interval '1 day' ORDER BY id DESC LIMIT 200",
@@ -61,8 +65,8 @@ chatRouter.post('/', requireUser, async (req, res) => {
   }
   lastPost.set(uid, now);
   const { rows } = await pool.query(
-    'INSERT INTO chat_messages (user_id, username, text, censored) VALUES ($1, $2, $3, $4) RETURNING *',
-    [uid, req.user.username, text, hits > 0],
+    'INSERT INTO chat_messages (user_id, username, text, censored, room) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [uid, req.user.username, text, hits > 0, roomOf(req.body?.room)],
   );
   res.status(201).json({ message: row(rows[0]), warning });
 });

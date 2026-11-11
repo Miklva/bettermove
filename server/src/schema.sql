@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS chat_messages_created ON chat_messages (created_at DESC);
+-- Un salon par langue (les anciens messages restent dans le salon francais)
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS room TEXT NOT NULL DEFAULT 'fr';
+CREATE INDEX IF NOT EXISTS chat_messages_room ON chat_messages (room, id);
 
 -- Support : copie de chaque demande (meme si l'envoi du mail echoue)
 CREATE TABLE IF NOT EXISTS support_messages (
@@ -282,3 +285,23 @@ CREATE TABLE IF NOT EXISTS visit_pages (
   PRIMARY KEY (day, visitor, path)
 );
 DELETE FROM visit_pages WHERE day < current_date - 395;
+
+-- Discussions sous les problemes : questions (parent_id NULL) et reponses
+CREATE TABLE IF NOT EXISTS puzzle_comments (
+  id          BIGSERIAL PRIMARY KEY,
+  puzzle_id   TEXT NOT NULL,
+  puzzle_ref  TEXT,
+  parent_id   BIGINT REFERENCES puzzle_comments(id) ON DELETE CASCADE,
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  username    TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  censored    BOOLEAN NOT NULL DEFAULT false,
+  deleted     BOOLEAN NOT NULL DEFAULT false,
+  -- Reponse lue par l'auteur de la question (pop-up deja montree)
+  asker_read  BOOLEAN NOT NULL DEFAULT false,
+  -- Vu dans le panneau admin
+  admin_seen  BOOLEAN NOT NULL DEFAULT false,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS puzzle_comments_puzzle ON puzzle_comments (puzzle_id);
+CREATE INDEX IF NOT EXISTS puzzle_comments_parent ON puzzle_comments (parent_id);

@@ -1,6 +1,7 @@
 import { ENDGAME_ADVANCED, KING_ADVANCED, OPENING_REFLEXES_ADVANCED, TACTICS_ADVANCED } from './advanced';
-import { BLACK_OPENINGS, WHITE_OPENINGS } from './openings';
+import { BLACK_OPENINGS, MORE_OPENINGS, WHITE_OPENINGS } from './openings';
 import { INITIATION } from './initiation';
+import { DEFENSE, STRATEGY } from './strategy';
 
 // Contenu des cours. Positions, lignes, quiz et defis ont ete verifies avec Stockfish lors de la redaction :
 // pense a reverifier toute nouvelle position (legalite, et pour un quiz que la bonne reponse est nettement la meilleure).
@@ -603,7 +604,7 @@ const ADVANCED: Record<string, Lesson[]> = {
 };
 for (const c of BASE_CHAPTERS) c.advanced = ADVANCED[c.id];
 
-export const CHAPTERS: Chapter[] = [INITIATION, ...BASE_CHAPTERS, WHITE_OPENINGS, BLACK_OPENINGS];
+export const CHAPTERS: Chapter[] = [INITIATION, ...BASE_CHAPTERS, STRATEGY, DEFENSE, WHITE_OPENINGS, BLACK_OPENINGS, MORE_OPENINGS];
 
 export const ALL_LESSONS = CHAPTERS.flatMap((c) => [...c.lessons, ...(c.advanced ?? [])].map((l) => ({ ...l, chapter: c })));
 

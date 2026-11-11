@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { requireUser } from './auth.js';
-import { isAdmin } from './moderation.js';
+import { forbiddenUsername, isAdmin } from './moderation.js';
 import { queueSnapshot } from './match.js';
 import { mailer, supportReplyEmail } from './mail.js';
 import { adminAudience, adminList, adminUser } from './adminDetail.js';
@@ -36,6 +36,7 @@ adminRouter.get('/stats', async (_req, res) => {
     sources,
     onlineElo,
     visits,
+    puzzleTalk,
   ] = await Promise.all([
     q(
       `SELECT
@@ -101,6 +102,7 @@ adminRouter.get('/stats', async (_req, res) => {
        LEFT JOIN visits v ON v.day = d::date
        GROUP BY d ORDER BY d`,
     ),
+    q(`SELECT count(*) FILTER (WHERE NOT admin_seen AND NOT deleted) AS unseen FROM puzzle_comments`),
   ]);
   const num = (v) => (v === null || v === undefined ? null : Number(v));
   const t = totals[0] ?? {};
@@ -140,6 +142,7 @@ adminRouter.get('/stats', async (_req, res) => {
     daily: { n: num(daily[0]?.n) ?? 0, players: num(daily[0]?.players) ?? 0, firstTry: num(daily[0]?.first_try) ?? 0 },
     chat: { n: num(chat[0]?.n) ?? 0, authors: num(chat[0]?.authors) ?? 0 },
     support: num(support[0]?.n) ?? 0,
+    puzzleTalk: num(puzzleTalk[0]?.unseen) ?? 0,
     sources: sources.map((r) => ({ source: r.source, n: num(r.n) })),
     visits: visits.map((r) => ({ day: r.day, n: num(r.n), anon: num(r.anon) })),
   });
@@ -247,4 +250,50 @@ adminRouter.delete('/support/:id', async (req, res) => {
   if (!Number.isInteger(id)) return res.status(400).json({ error: 'Demande inconnue' });
   await pool.query('DELETE FROM support_messages WHERE id = $1', [id]);
   res.json({ ok: true });
+});
+
+/* ---------------- Discussions sous les problemes ---------------- */
+
+adminRouter.get('/puzzle-talk', async (_req, res) => {
+  const rows = await q(
+    `SELECT m.id, m.puzzle_id, coalesce(m.puzzle_ref, q.puzzle_ref) AS puzzle_ref, m.parent_id, m.username, m.text, m.censored, m.deleted, m.admin_seen, m.created_at,
+            q.text AS question, q.username AS asker
+     FROM puzzle_comments m LEFT JOIN puzzle_comments q ON q.id = m.parent_id
+     ORDER BY m.admin_seen, m.id DESC LIMIT 300`,
+  );
+  res.json({
+    messages: rows.map((r) => ({
+      id: Number(r.id),
+      puzzleId: r.puzzle_id,
+      ref: r.puzzle_ref,
+      parent: r.parent_id ? Number(r.parent_id) : null,
+      user: r.username,
+      text: r.text,
+      censored: r.censored,
+      deleted: r.deleted,
+      seen: r.admin_seen,
+      question: r.question,
+      asker: r.asker,
+      at: r.created_at,
+    })),
+  });
+});
+
+/** Marque des messages (ou tout) comme vus */
+adminRouter.put('/puzzle-talk/seen', async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : null;
+  if (ids) await pool.query('UPDATE puzzle_comments SET admin_seen = true WHERE id = ANY($1)', [ids]);
+  else await pool.query('UPDATE puzzle_comments SET admin_seen = true WHERE NOT admin_seen');
+  res.json({ ok: true });
+});
+
+/* ---------------- Pseudos interdits deja crees (avant le filtre) ---------------- */
+
+adminRouter.get('/bad-usernames', async (_req, res) => {
+  const rows = await q('SELECT username, created_at, last_seen FROM users ORDER BY created_at DESC');
+  res.json({
+    users: rows
+      .filter((r) => forbiddenUsername(r.username))
+      .map((r) => ({ username: r.username, createdAt: r.created_at, lastSeen: r.last_seen })),
+  });
 });

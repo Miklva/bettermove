@@ -43,20 +43,11 @@ interface Props {
 type Difficulty = 'easier' | 'normal' | 'harder';
 const OFFSET: Record<Difficulty, number> = { easier: -250, normal: 0, harder: 250 };
 
-/** Bonus de rapidite : plus tu trouves vite, plus tu gagnes d'Elo */
-function speedFactor(seconds: number): number {
-  if (seconds <= 10) return 1.3;
-  if (seconds <= 30) return 1.15;
-  if (seconds <= 60) return 1;
-  if (seconds <= 120) return 0.85;
-  return 0.7;
-}
-
 export function PuzzlePage({ notify, player }: Props) {
   const { profile, recordPuzzle } = player;
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [recorded, setRecorded] = useState<{ delta: number; factor: number; usedHint: boolean } | null>(null);
+  const [recorded, setRecorded] = useState<{ delta: number; usedHint: boolean } | null>(null);
   const [difficulty, setDifficulty] = useState<Difficulty>(() => load('bettermove.puzzleDifficulty', 'normal'));
   const [theme, setTheme] = useState<string>(() => load('bettermove.puzzleTheme', ''));
   const [available, setAvailable] = useState<{ total: number; themes: string[] } | null>(null);
@@ -156,8 +147,8 @@ export function PuzzlePage({ notify, player }: Props) {
     if (!puzzle || source === 'mistakes') return;
     // Indice utilise : reussite sans aucun point. Solution affichee : compte comme un echec.
     const outcome = r.win ? (r.usedHint ? 'assisted' : 'win') : 'fail';
-    const factor = outcome === 'win' ? speedFactor(r.seconds) : 1;
-    const { before, after } = recordPuzzle(puzzle, outcome, factor, r.seconds);
+    // Le temps n'a aucune influence sur les points : on reflechit a son rythme
+    const { before, after } = recordPuzzle(puzzle, outcome, 1, r.seconds);
     if (outcome === 'win') {
       earn(EARN.puzzle, t('Problème réussi'), true);
       track('puzzle-win');
@@ -168,7 +159,7 @@ export function PuzzlePage({ notify, player }: Props) {
       if (n) notify(t('Problème ajouté à tes révisions'));
       setSrs(srsStats());
     }
-    setRecorded({ delta: Math.round(after) - Math.round(before), factor, usedHint: r.usedHint });
+    setRecorded({ delta: Math.round(after) - Math.round(before), usedHint: r.usedHint });
   };
 
   const history = profile.puzzleHistory.slice(0, 12);
@@ -195,7 +186,7 @@ export function PuzzlePage({ notify, player }: Props) {
       {puzzle && !recorded && source === 'db' && (() => {
         const st = stakes(profile.puzzles.rating, puzzle.rating, puzzleGames(profile));
         return (
-          <div className="stakes full" title={t("Elo en jeu sur ce problème. Résolu en moins de 30 s : bonus de rapidité ; avec un indice : 0 point.")}>
+          <div className="stakes full" title={t("Elo en jeu sur ce problème. Prends ton temps, la rapidité ne compte pas ; avec un indice : 0 point.")}>
             <span className="muted">{t('Ce problème ({elo})', { elo: puzzle.rating })}</span>
             <span className="up">{t("Réussi")}{" "}{signed(st.win)}</span>
             <span className="down">{t("Raté")}{" "}{signed(st.loss)}</span>
@@ -343,10 +334,6 @@ export function PuzzlePage({ notify, player }: Props) {
 
   const meta = !recorded ? null : recorded.usedHint ? (
     <>{t("· indice utilisé, pas de points")}</>
-  ) : recorded.factor !== 1 ? (
-    <>
-      · {recorded.factor > 1 ? t("bonus rapidité") : t("résolu lentement")} ×{recorded.factor.toFixed(2)}
-    </>
   ) : null;
 
   return (
@@ -365,6 +352,7 @@ export function PuzzlePage({ notify, player }: Props) {
         sideTop={source === 'mistakes' ? mistakeCard : ratingCard}
         sideBottom={options}
         doneMeta={meta}
+        talk={source === 'db'}
         onRetryLoad={() => {
           setTheme('');
           start('', difficulty);

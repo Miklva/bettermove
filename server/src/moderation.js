@@ -76,3 +76,61 @@ const ADMINS = (process.env.ADMIN_USERS ?? '')
   .map((x) => x.trim().toLowerCase())
   .filter(Boolean);
 export const isAdmin = (name) => ADMINS.includes(String(name).toLowerCase());
+
+/* ---------------- Pseudos ---------------- */
+
+// Termes haineux interdits n'importe ou dans un pseudo, meme colles a d'autres lettres
+// ("xXAdolfHitlerXx"), deguises ("H1tl3r", "HitIer" avec un i majuscule, "Hytler") ou a l'envers.
+const HATE_IN_NAMES = [
+  'hitler', 'hitlr', 'hitla', 'hilter', 'adolf', 'adolph', 'fuhrer', 'fuehrer', 'fuhrer', 'nazi', 'nazis', 'neonazi',
+  'siegheil', 'sieghail', 'himmler', 'goebbels', 'goering', 'mengele', 'eichmann', 'gestapo',
+  'waffen', 'ss88', 'hh88', 'auschwitz', 'holocaust', 'shoah', 'genocide', 'kkk', 'kukluxklan',
+  'whitepower', 'whitepride', 'aryannation', '1488', '14words', 'swastika', 'svastika', 'thirdreich', 'dritteReich', 'troisiemereich', '3reich', 'iiireich', 'reichsfuhrer',
+  'nigger', 'nigga', 'niger', 'bougnoule', 'youpin', 'chinetoque', 'tarlouze', 'negro', 'negre',
+];
+// Vrais prenoms ou mots qui contiennent un terme ci-dessus : autorises
+const NAME_EXCEPTIONS = ['nazim', 'nazir', 'nazih', 'nazira', 'nazia', 'nigeria', 'montenegro', 'niger', 'reichert', 'reichel'];
+
+const collapse = (t) => t.replace(/(.)\1+/g, '$1'); // lettres doublees
+/** Squelette : minuscules, sans accents, sans separateurs, chiffres et lettres qui se ressemblent fusionnes */
+function skeleton(text) {
+  const base = collapse(
+    text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ph/g, 'f')
+      .replace(/[^a-z0-9@$!|+]/g, ''),
+  );
+  return base
+    .replace(/0/g, 'o')
+    .replace(/[@4]/g, 'a')
+    .replace(/3/g, 'e')
+    .replace(/[5$]/g, 's')
+    .replace(/[7+]/g, 't')
+    .replace(/[1!|l]/g, 'i') // l, I, 1 se confondent visuellement
+    .replace(/y/g, 'i');
+}
+const hateSkeletons = [...new Set(HATE_IN_NAMES.map(skeleton))];
+// Variante "lettres fusionnees" ("H1itler") seulement pour les termes assez longs (sinon "heil" ~ "helper")
+const hateLoose = [...new Set(hateSkeletons.map(collapse).filter((w) => w.length >= 5))];
+const exceptionSkeletons = NAME_EXCEPTIONS.map(skeleton);
+// Chiffres codes neonazis (88 = HH, 14/88) et KKK : verifies sur le texte brut
+// "heil" seulement en mot isole (sinon Sheila, Heilmann...)
+const HATE_RAW = /(^|\D)(1488|8814|14\D?88)(\D|$)|k[\W_]*k[\W_]*k|(^|[^a-z])h[e3][i1!|]l+(?![a-z])/i;
+
+/** Pseudo refuse : insulte (comme dans le chat) ou reference haineuse, meme deguisee */
+export function forbiddenUsername(name) {
+  const raw = String(name ?? '');
+  if (containsBanned(raw)) return true;
+  if (HATE_RAW.test(raw)) return true;
+  let s = skeleton(raw);
+  // Les exceptions (vrais prenoms) sont retirees avant la recherche
+  for (const ok of exceptionSkeletons) s = s.split(ok).join('_');
+  const loose = collapse(s);
+  const has = (t, list) => {
+    const rev = [...t].reverse().join('');
+    return list.some((w) => w.length >= 3 && (t.includes(w) || rev.includes(w)));
+  };
+  return has(s, hateSkeletons) || has(loose, hateLoose);
+}

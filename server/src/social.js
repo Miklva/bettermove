@@ -2,8 +2,9 @@
 import { Router } from 'express';
 import { pool } from './db.js';
 import { requireUser } from './auth.js';
-import { censor } from './moderation.js';
+import { censor, isAdmin } from './moderation.js';
 import { activeGameOf, createGame } from './online.js';
+import { unreadPuzzleReplies } from './puzzleTalk.js';
 
 export const socialRouter = Router();
 socialRouter.use(requireUser);
@@ -327,7 +328,7 @@ socialRouter.get('/challenges/:id', async (req, res) => {
 
 socialRouter.get('/notifications', async (req, res) => {
   const me = req.user.id;
-  const [dm, fr, ch, games, accepted, rematchOffers, rematchDone] = await Promise.all([
+  const [dm, fr, ch, games, accepted, rematchOffers, rematchDone, puzzleReplies] = await Promise.all([
     pool.query(
       'SELECT count(*) FROM direct_messages WHERE to_id = $1 AND read_at IS NULL AND from_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = $1)',
       [me],
@@ -359,8 +360,18 @@ socialRouter.get('/notifications', async (req, res) => {
        WHERE (white_id = $1 OR black_id = $1) AND rematch_game_id IS NOT NULL AND rematch_at > now() - interval '2 minutes'`,
       [me],
     ),
+    unreadPuzzleReplies(me).catch(() => []),
   ]);
+  // Admin : nouveaux messages sous les problemes (pastille sur le bouton Administration)
+  const adminTalk = isAdmin(req.user.username)
+    ? await pool
+        .query('SELECT count(*) FROM puzzle_comments WHERE NOT admin_seen AND NOT deleted')
+        .then((r) => Number(r.rows[0].count))
+        .catch(() => 0)
+    : undefined;
   res.json({
+    puzzleReplies,
+    adminTalk,
     unreadDm: Number(dm.rows[0].count),
     friendRequests: Number(fr.rows[0].count),
     challenges: ch.rows.map((r) => ({ id: Number(r.id), from: r.username })),

@@ -8,7 +8,9 @@ import { Modal } from '../components/Modal';
 import { TIME_CONTROLS } from '../game/timeControls';
 import { useRouteSync, useRouteTab } from '../router';
 
-import { locale, t, tServer } from '../i18n';
+import { lang, locale, t, tServer } from '../i18n';
+import { Flag, LANG_NAMES, type FlagCode } from '../components/Flag';
+import { load, save } from '../lib/storage';
 interface ChatMessage {
   id: number;
   user: string;
@@ -52,6 +54,22 @@ export function CommunityPage({ onAccount, onPlay, onProfile }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const lastId = useRef(0);
   const stick = useRef(true);
+  // Salon par langue : celui de la langue de l'app par defaut, puis le dernier choisi
+  const ROOMS = Object.keys(LANG_NAMES) as FlagCode[];
+  const [room, setRoomState] = useState<FlagCode>(() => {
+    const saved = load<string>('bettermove.chatRoom', '');
+    if ((ROOMS as string[]).includes(saved)) return saved as FlagCode;
+    return (ROOMS as string[]).includes(lang()) ? (lang() as FlagCode) : 'en';
+  });
+  const setRoom = (r: FlagCode) => {
+    if (r === room) return;
+    save('bettermove.chatRoom', r);
+    setMessages([]);
+    setLoaded(false);
+    lastId.current = 0;
+    stick.current = true;
+    setRoomState(r);
+  };
   const online = sync.status !== 'offline' && sync.status !== 'checking';
   const logged = online && !!sync.user;
   const [view, setView] = useState<'room' | 'dm'>('room');
@@ -102,7 +120,7 @@ export function CommunityPage({ onAccount, onPlay, onProfile }: Props) {
     let stop = false;
     const tick = async () => {
       try {
-        const r = await apiCall<{ messages: ChatMessage[]; deleted: number[] }>(`/chat${lastId.current ? `?after=${lastId.current}` : ''}`);
+        const r = await apiCall<{ messages: ChatMessage[]; deleted: number[] }>(`/chat?room=${room}${lastId.current ? `&after=${lastId.current}` : ''}`);
         if (stop) return;
         const gone = new Set(r.deleted);
         setMessages((m) => {
@@ -129,7 +147,7 @@ export function CommunityPage({ onAccount, onPlay, onProfile }: Props) {
       stop = true;
       window.clearInterval(id);
     };
-  }, [online]);
+  }, [online, room]);
 
   // Defile vers le bas a l'arrivee de messages, sauf si on lit plus haut
   useEffect(() => {
@@ -145,7 +163,7 @@ export function CommunityPage({ onAccount, onPlay, onProfile }: Props) {
     try {
       const r = await apiCall<{ message: ChatMessage; warning: string | null }>('/chat', {
         method: 'POST',
-        body: JSON.stringify({ text: t }),
+        body: JSON.stringify({ text: t, room }),
       });
       setMessages((m) => (m.some((x) => x.id === r.message.id) ? m : [...m, r.message]));
       lastId.current = Math.max(lastId.current, r.message.id);
@@ -222,6 +240,21 @@ export function CommunityPage({ onAccount, onPlay, onProfile }: Props) {
         />
       ) : (
       <>
+      <div className="chat-rooms" role="tablist" aria-label={t("Salons")}>
+        {ROOMS.map((r) => (
+          <button
+            key={r}
+            role="tab"
+            aria-selected={room === r}
+            className={`chat-room ${room === r ? 'selected' : ''}`}
+            onClick={() => setRoom(r)}
+            title={LANG_NAMES[r]}
+            aria-label={LANG_NAMES[r]}
+          >
+            <Flag code={r} size={26} />
+          </button>
+        ))}
+      </div>
       <div
         className="card chat-list"
         ref={listRef}

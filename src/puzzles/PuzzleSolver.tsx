@@ -6,6 +6,7 @@ import { Chess, type Square } from 'chess.js';
 import { Board } from '../components/Board';
 import { HistoryNavBar, positionsFrom, useHistoryNav, type Position } from '../components/HistoryNav';
 import type { Puzzle } from './db';
+import { PuzzleTalkButton } from './PuzzleTalk';
 import { explainMistake, explainSolution, HINT_LEVELS, progressiveHint, type Explanation, type Shape } from './explain';
 import { useSettings } from '../settings/settings';
 import { sounds } from '../lib/sounds';
@@ -50,6 +51,8 @@ interface Props {
   /** Appele a chaque mauvais coup, et a chaque indice demande */
   onMistake?: () => void;
   onHint?: () => void;
+  /** Bouton "Je ne comprends pas" : discussion sous le probleme (problemes de la base Lichess) */
+  talk?: boolean;
 }
 
 type Phase = 'loading' | 'intro' | 'solving' | 'wrong' | 'solved' | 'revealing' | 'revealed' | 'error';
@@ -71,6 +74,7 @@ export function PuzzleSolver({
   onRetryLoad,
   onMistake,
   onHint,
+  talk = false,
 }: Props) {
   const { settings } = useSettings();
   const chess = useRef(new Chess());
@@ -397,7 +401,7 @@ export function PuzzleSolver({
   const sideName = playerColor === 'w' ? t('Blancs') : t('Noirs');
 
   return (
-    <div className="play">
+    <div className="play puzzle-play">
       <section className="board-col">
         <div className="puzzle-topline">
           <span className={`color-dot ${playerColor === 'w' ? 'white' : 'black'}`} />
@@ -481,6 +485,7 @@ export function PuzzleSolver({
                   )}
                 </>
               )}
+              {done && talk && puzzle && puzzle.rating > 0 && <PuzzleTalkButton puzzle={puzzle} className="wide" />}
               {done && puzzle && puzzle.rating > 0 && (
                 <p className="muted small puzzle-meta">{t("Problème")}{" "}{puzzle.id} · {puzzle.rating}{" "}{t("Elo")}{" "}{doneMeta} ·{' '}
                   <a href={`https://lichess.org/training/${puzzle.id}`} target="_blank" rel="noreferrer">{t("voir sur Lichess")}</a>
@@ -537,7 +542,10 @@ export function PuzzleSolver({
                 {allowSkip && <button className="btn ghost" onClick={onNext}>{t("Passer")}</button>}
               </>
             ) : (
-              <button className="btn primary" onClick={onNext}>{nextLabel ?? t("Problème suivant")}</button>
+              <>
+                <button className="btn primary" onClick={onNext}>{nextLabel ?? t("Problème suivant")}</button>
+                {talk && puzzle && puzzle.rating > 0 && <PuzzleTalkButton puzzle={puzzle} />}
+              </>
             )
           }
         >

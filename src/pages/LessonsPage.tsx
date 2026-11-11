@@ -18,6 +18,8 @@ import { sounds } from '../lib/sounds';
 import { useRouteSync } from '../router';
 import { track } from '../achievements/events';
 import { load, save } from '../lib/storage';
+import { MasteryPips, MasteryRun } from '../lessons/MasteryRun';
+import { lessonTheme, useMastery } from '../lessons/mastery';
 
 import { t, tn } from '../i18n';
 interface Props {
@@ -48,6 +50,26 @@ export function LessonsPage({ player }: Props) {
   });
   // Lien direct vers une lecon : /apprendre/cours/<id>
   useRouteSync(2, active, setActive, (a) => a?.lesson.id ?? null, (s) => findLesson(s) ?? undefined, true, { value: null });
+  // Problemes sur ce cours : /apprendre/cours/<id>/maitrise
+  const [mastery, setMastery] = useState(false);
+  useRouteSync(3, mastery, setMastery, (v) => (v ? 'maitrise' : null), (s) => (s === 'maitrise' ? true : undefined), !!active, { value: false });
+  useEffect(() => {
+    if (!active) setMastery(false);
+  }, [active]);
+
+  if (active && mastery && lessonTheme(active.lesson))
+    return (
+      <MasteryRun
+        key={`m-${active.lesson.id}`}
+        chapter={active.chapter}
+        lesson={active.lesson}
+        player={player}
+        onExit={() => {
+          setMastery(false);
+          setActive(null);
+        }}
+      />
+    );
 
   if (active)
     return (
@@ -58,16 +80,27 @@ export function LessonsPage({ player }: Props) {
         player={player}
         onExit={() => setActive(null)}
         onNext={(next) => setActive(next)}
+        onMastery={() => setMastery(true)}
       />
     );
 
-  return <CourseMap player={player} onOpen={(chapter, lesson) => setActive({ chapter, lesson })} />;
+  return (
+    <CourseMap
+      player={player}
+      onOpen={(chapter, lesson) => setActive({ chapter, lesson })}
+      onMastery={(chapter, lesson) => {
+        setActive({ chapter, lesson });
+        setMastery(true);
+      }}
+    />
+  );
 }
 
 /* ---------------- Carte du parcours ---------------- */
 
-function CourseMap({ player, onOpen }: { player: PlayerProfile; onOpen: (c: Chapter, l: Lesson) => void }) {
+function CourseMap({ player, onOpen, onMastery }: { player: PlayerProfile; onOpen: (c: Chapter, l: Lesson) => void; onMastery: (c: Chapter, l: Lesson) => void }) {
   const { profile } = player;
+  const masteryAll = useMastery();
   const CHAPTERS = orderedChapters(profile);
   const lv = levelFromXp(profile.xp);
   const totalStars = Object.values(profile.lessons).reduce((s, l) => s + l.stars, 0);
@@ -149,6 +182,11 @@ function CourseMap({ player, onOpen }: { player: PlayerProfile; onOpen: (c: Chap
                   </i>
                 ))}
               </span>
+              {stars > 0 && lessonTheme(l) && (
+                <button className="mastery-link" onClick={() => onMastery(ch, l)} title={t('Problèmes sur ce cours, de plus en plus durs')}>
+                  🎯 {t('Maîtrise')} <MasteryPips value={masteryAll[l.id] ?? 0} />
+                </button>
+              )}
             </div>
           </div>
         );
@@ -336,9 +374,10 @@ interface PlayerProps {
   player: PlayerProfile;
   onExit: () => void;
   onNext: (next: { chapter: Chapter; lesson: Lesson }) => void;
+  onMastery: () => void;
 }
 
-function LessonPlayer({ chapter, lesson, player, onExit, onNext }: PlayerProps) {
+function LessonPlayer({ chapter, lesson, player, onExit, onNext, onMastery }: PlayerProps) {
   const [index, setIndex] = useState(0);
   const [errors, setErrors] = useState(0);
   const [xp, setXp] = useState(0);
@@ -450,6 +489,12 @@ function LessonPlayer({ chapter, lesson, player, onExit, onNext }: PlayerProps) 
               <button className="btn primary" onClick={onExit}>{t("Retour au parcours")}</button>
             )}
           </div>
+          {lessonTheme(lesson) && (
+            <button className="btn wide mastery-cta" onClick={onMastery}>
+              🎯 {t("Problèmes sur ce cours")}
+              <span className="muted small">{t("5 paliers de plus en plus durs pour maîtriser la leçon")}</span>
+            </button>
+          )}
           <button className="btn ghost wide" onClick={onExit}>{t("Retour au parcours")}</button>
         </div>
       </div>

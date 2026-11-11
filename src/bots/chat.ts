@@ -88,6 +88,8 @@ export type Event =
   | 'lostQueen'
   | 'userBlunder'
   | 'botBlunder'
+  /** Le bot vient de poser lui-meme la piece sur une case ou elle se fait prendre */
+  | 'botHung'
   | 'giveCheck'
   | 'gotCheck'
   | 'userCastle'
@@ -442,7 +444,8 @@ const PERSONAS: Record<string, Persona> = {
       tookQueen: ['Ta dame est à moi !'],
       lostQueen: ['Oh mince, ma dame…'],
       userBlunder: ['Oh, tu es sûr de ton coup ? Trop tard, je prends !', 'Merci pour la pièce !'],
-      botBlunder: ['Ah zut, je l’ai laissée en prise…', 'Bien vu, j’avais raté ça.'],
+      botBlunder: ['Ah zut, {piece} était en prise…', 'Bien vu, j’avais pas vu la menace sur {piece}.'],
+      botHung: ['Oups, j’ai mis {piece} en prise toute seule…', 'Aïe, j’ai joué {piece} sur une case attaquée. Bien joué !'],
       gotCheck: ['Oups, échec !'],
       userCastle: ['Bonne idée de mettre ton roi à l’abri.'],
       openE4: ['e4 ! Un classique.'],
@@ -1035,6 +1038,7 @@ const COMMON: Lines = {
   nice: ['Merci, toi aussi !', 'C’est gentil ça.'],
   myBlunder: ['Ça arrive à tout le monde. Respire et cherche la suite.', 'Une erreur n’est pas une défaite.'],
   botBlunderRemark: ['Hmm, oui, j’aurais pu mieux faire.', 'Personne n’est parfait.'],
+  botHung: ['Oups, j’ai mis {piece} en prise.', 'Bien vu, cette case était attaquée.'],
   announceCheck: ['Je vois, je vois.', 'Oui, j’avais remarqué.'],
   resign: ['Abandonner ? Pas question !', 'On joue jusqu’au bout.'],
 };
@@ -1079,7 +1083,7 @@ const RULE_FACTS: [RegExp, string][] = [
   [/\bpion\b/, 'le pion avance d’une case (deux au premier coup) et prend en diagonale. Il ne recule jamais.'],
 ];
 
-function fill(line: string, bot: Bot, v: GameView, mem: Memory, text: string): string {
+function fill(line: string, bot: Bot, v: GameView, mem: Memory, text: string, vars: Record<string, string> = {}): string {
   const echo = text.replace(/:e:[a-z0-9-]+:/g, '').trim().slice(0, 30);
   const diff = v.botDiff;
   return line
@@ -1088,7 +1092,8 @@ function fill(line: string, bot: Bot, v: GameView, mem: Memory, text: string): s
     .replace(/\{echo\}/g, echo || '…')
     .replace(/\{chance\}/g, String(winChance(v, bot)))
     .replace(/\{diff\}/g, diff > 0 ? `+${diff}` : String(diff))
-    .replace(/\{phaseFr\}/g, (EN() ? P().phase : PHASE_FR)[phaseOf(v)]);
+    .replace(/\{phaseFr\}/g, (EN() ? P().phase : PHASE_FR)[phaseOf(v)])
+    .replace(/\{(\w+)\}/g, (m, k) => vars[k] ?? m);
 }
 
 function linesOf(bot: Bot): Lines {
@@ -1100,9 +1105,9 @@ function lineFor(bot: Bot, key: Key, mem: Memory): string | null {
   return pick(linesOf(bot)[key], mem.botLines) ?? pick((EN() ? P().common : COMMON)[key], mem.botLines);
 }
 
-function finish(bot: Bot, raw: string, v: GameView, mem: Memory, text: string) {
+function finish(bot: Bot, raw: string, v: GameView, mem: Memory, text: string, vars: Record<string, string> = {}) {
   const p = PERSONAS[bot.id] ?? PERSONAS.camille;
-  let out = fill(raw, bot, v, mem, text);
+  let out = fill(raw, bot, v, mem, text, vars);
   // De temps en temps, le bot glisse le prenom du joueur
   if (mem.userName && rnd() < 0.15 && !out.includes(mem.userName)) out = `${mem.userName}, ${EN() && !!P().keepCase?.test(out) ? out[0] : out[0].toLowerCase()}${out.slice(1)}`;
   out = p.voice(out);
@@ -1312,6 +1317,13 @@ export function moodLine(bot: Bot, mood: Mood): string | null {
  * Le bot regarde le dernier coup et parle parfois tout seul :
  * dame prise, gaffe, echec, roque, debut de partie, passage en finale...
  */
+/** Case d'arrivee d'un coup en notation SAN (null pour le roque) */
+const squareOf = (san: string) => san.replace(/=[A-Z]|[+#!?]/g, '').match(/[a-h][1-8]$/)?.[0] ?? null;
+
+const PIECE_FR: Record<string, string> = { p: 'mon pion', n: 'mon cavalier', b: 'mon fou', r: 'ma tour', q: 'ma dame' };
+const PIECE_EN: Record<string, string> = { p: 'my pawn', n: 'my knight', b: 'my bishop', r: 'my rook', q: 'my queen' };
+const pieceName = (t: string) => (lang() === 'fr' ? PIECE_FR : lang() === 'en' ? PIECE_EN : null)?.[t] ?? '';
+
 export function botSpontaneous(bot: Bot, v: GameView, mem: Memory): string | null {
   const p = PERSONAS[bot.id] ?? PERSONAS.camille;
   const ply = v.moves.length;
@@ -1319,11 +1331,18 @@ export function botSpontaneous(bot: Bot, v: GameView, mem: Memory): string | nul
   if (!last || v.result) return null;
   const byBot = last.color === v.botColor;
   const events: [Event, number][] = [];
+  const vars: Record<string, string> = {};
   if (last.captured === 'q') events.push([byBot ? 'tookQueen' : 'lostQueen', 1]);
   else if (last.captured && VAL[last.captured] >= 3) {
     // Prise sans reprise (le materiel penche nettement) : gaffe
     if (byBot && v.botDiff >= 3) events.push(['userBlunder', 0.8]);
-    if (!byBot && v.botDiff <= -3) events.push(['botBlunder', 0.7]);
+    if (!byBot && v.botDiff <= -3) {
+      // La piece prise venait-elle d'etre jouee par le bot (mise en prise) ou etait-elle restee attaquee ?
+      const prev = v.moves[ply - 2];
+      const hung = !!prev && prev.color === v.botColor && squareOf(prev.san) === squareOf(last.san);
+      events.push([hung ? 'botHung' : 'botBlunder', 0.7]);
+      vars.piece = pieceName(last.captured);
+    }
   }
   if (last.san.includes('=')) events.push([byBot ? 'promote' : 'userPromote', 0.9]);
   if (last.san.includes('+') && !last.san.includes('#')) events.push([byBot ? 'giveCheck' : 'gotCheck', 0.35]);
@@ -1367,10 +1386,11 @@ export function botSpontaneous(bot: Bot, v: GameView, mem: Memory): string | nul
     const important = e === 'tookQueen' || e === 'lostQueen' || e === 'promote' || e === 'userPromote';
     if (!important && ply - mem.spokeAt < 4) continue;
     if (rnd() > weight * (important ? 1 : 0.4 + p.chatty)) continue;
-    const l = lineFor(bot, e, mem);
+    // Une langue sans phrase "mise en prise" retombe sur la phrase de gaffe generale
+    const l = lineFor(bot, e, mem) ?? (e === 'botHung' ? lineFor(bot, 'botBlunder', mem) : null);
     if (!l) continue;
     mem.spokeAt = ply;
-    return finish(bot, l, v, mem, '');
+    return finish(bot, l, v, mem, '', vars);
   }
   return null;
 }

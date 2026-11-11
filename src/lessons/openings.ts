@@ -336,3 +336,128 @@ export const BLACK_OPENINGS: Chapter = {
     }),
   ],
 };
+
+// Ouvertures supplementaires (lignes et quiz verifies avec Stockfish 17.1, profondeur 20)
+export const MORE_OPENINGS: Chapter = {
+  id: 'more-openings',
+  title: 'Plus d’ouvertures',
+  icon: '📚',
+  color: '#9fd3ff',
+  description: 'De nouvelles ouvertures pour élargir ton répertoire, avec les Blancs et avec les Noirs.',
+  lessons: [
+    openingLesson({
+      id: 'w-scotch',
+      title: 'L’Écossaise',
+      icon: '🏴',
+      summary: '3.d4 : ouvrir le centre dès le troisième coup.',
+      text: 'Au lieu de 3.Fc4, les Blancs frappent tout de suite avec 3.d4. Après 3...exd4, on reprend avec le cavalier : le centre est ouvert et les pièces sortent vite. Contre 4...Cf6, l’échange Cxc6 puis e5 chasse le cavalier noir.',
+      line: L('e2e4 e7e5 g1f3 b8c6 d2d4 e5d4 f3d4 g8f6 d4c6 b7c6 e4e5 d8e7 d1e2 f6d5 c2c4 c8a6 b2b3'),
+      extra: [
+        {
+          type: 'quiz',
+          fen: 'r1bqkbnr/pppp1ppp/2n5/8/3pP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 4',
+          question: 'Les Noirs ont pris en d4. Comment reprendre ?',
+          options: ['f3d4', 'd1d4', 'c1e3', 'b1c3'],
+          answer: 0,
+          explain: 'Cxd4 reprend le pion en développant. Dxd4 ?? se fait prendre par le cavalier c6, et Fe3 ?? ou Cc3 ?? laissent le pion d4 prendre une pièce.',
+        },
+      ],
+    }),
+    openingLesson({
+      id: 'w-qg',
+      title: 'Le Gambit dame',
+      icon: '👑',
+      summary: '1.d4 d5 2.c4 : attaquer le centre noir avec un pion.',
+      text: 'Le pion c4 attaque d5. Ce n’est pas un vrai gambit : si les Noirs prennent, les Blancs récupèrent le pion. Contre 2...e6 (Gambit dame refusé), développement classique : Cc3, Fg5, e3, Cf3 et roque.',
+      line: L('d2d4 d7d5 c2c4 e7e6 b1c3 g8f6 c1g5 f8e7 e2e3 e8g8 g1f3 h7h6 g5h4 b7b6'),
+      extra: [
+        {
+          type: 'quiz',
+          fen: 'r1bqkb1r/pppn1ppp/5n2/3p2B1/3P4/2N5/PP2PPPP/R2QKBNR w KQkq - 0 6',
+          question: 'Le pion d5 a l’air gratuit. Faut-il le prendre ?',
+          options: ['e2e3', 'c3d5', 'c3e4', 'b2b4'],
+          answer: 0,
+          explain: 'Non ! Cxd5 ?? tombe dans le piège de l’éléphant : Cxd5 ! Fxd8 Fb4+ Dd2 Fxd2+ Rxd2 Rxd8, et les Noirs ont gagné une pièce. e3 continue tranquillement le développement. Ce4 ?? perd le cavalier (dxe4) et b4 ? perd un pion (Fxb4).',
+        },
+      ],
+    }),
+    openingLesson({
+      id: 'w-caro-adv',
+      title: 'Contre la Caro-Kann : l’avance',
+      icon: '🧗',
+      summary: '3.e5 : gagner de l’espace contre 1...c6.',
+      text: 'Après 1...c6 2.d4 d5, 3.e5 gagne de l’espace et bloque le centre. Les Noirs sortent leur fou en f5 avant de jouer e6. Les Blancs se développent calmement (Cf3, Fe2, roque) et gardent l’avantage d’espace.',
+      line: L('e2e4 c7c6 d2d4 d7d5 e4e5 c8f5 g1f3 e7e6 f1e2 c6c5 c1e3 b8d7 e1g1'),
+    }),
+    openingLesson({
+      id: 'w-vienna',
+      title: 'La Viennoise',
+      icon: '🎻',
+      summary: '2.Cc3 : un cavalier d’abord, puis f4.',
+      text: 'Avec 2.Cc3, les Blancs gardent l’option f4 pour attaquer le pion e5. Plan typique : Fc4, d3, f4 et Cf3, avec une attaque sur l’aile roi.',
+      line: L('e2e4 e7e5 b1c3 g8f6 f1c4 b8c6 d2d3 f8c5 f2f4 d7d6 g1f3 e8g8'),
+      extra: [
+        {
+          type: 'quiz',
+          fen: 'rnbqkb1r/pppp1ppp/8/4p3/2B1n3/2N5/PPPP1PPP/R1BQK1NR w KQkq - 0 4',
+          question: 'Les Noirs ont pris le pion e4. Comment réagir ?',
+          options: ['d1h5', 'd1g4', 'f2f3', 'd2d3'],
+          answer: 0,
+          explain: 'Dh5 ! menace Dxf7# : les Noirs doivent jouer Cd6, puis Dxe5+ récupère le pion. Dg4 ? permet …d5 avec un gain de temps, f3 ?? se fait punir par Cxc3 puis Dh4+, et d3 ? laisse les Noirs garder un bon jeu après Cxc3.',
+        },
+      ],
+    }),
+    openingLesson({
+      id: 'b-french',
+      title: 'La Française',
+      icon: '🥖',
+      summary: '1...e6 : une défense solide aux plans clairs.',
+      text: 'Après 1.e4 e6 2.d4 d5, les Noirs attaquent le centre. Contre 3.e5 (variante d’avance), le plan est toujours le même : frapper la base de la chaîne de pions avec ...c5, puis mettre la pression sur d4 avec Cc6 et Db6.',
+      line: L('e2e4 e7e6 d2d4 d7d5 e4e5 c7c5 c2c3 b8c6 g1f3 d8b6 a2a3 c5c4 b1d2 c6a5'),
+      extra: [
+        {
+          type: 'quiz',
+          fen: 'rnbqkbnr/ppp2ppp/4p3/3pP3/3P4/8/PPP2PPP/RNBQKBNR b KQkq - 0 3',
+          question: 'Les Blancs ont avancé en e5. Quel coup attaque leur chaîne de pions ?',
+          options: ['c7c5', 'g8f6', 'f8c5', 'd8d6'],
+          answer: 0,
+          explain: 'c5 frappe d4, la base de la chaîne. Cf6 ?? se fait prendre par exf6, Fc5 ?? par dxc5 et Dd6 ?? par exd6 : trois pièces perdues pour rien.',
+        },
+      ],
+    }),
+    openingLesson({
+      id: 'b-slav',
+      title: 'La Slave',
+      icon: '🛡️',
+      summary: '1.d4 d5 2.c4 c6 : protéger d5 sans enfermer le fou.',
+      text: 'Contre le Gambit dame, 2...c6 défend d5 tout en laissant ouverte la diagonale du fou c8. Si les Blancs jouent Cf3 et Cc3, les Noirs prennent en c4, sortent le fou en f5 et obtiennent un jeu solide.',
+      line: L('d2d4 d7d5 c2c4 c7c6 g1f3 g8f6 b1c3 d5c4 a2a4 c8f5 e2e3 e7e6 f1c4 f8b4 e1g1 e8g8'),
+    }),
+    openingLesson({
+      id: 'b-kid',
+      title: 'L’Est-indienne',
+      icon: '🐉',
+      summary: 'Laisser les Blancs prendre le centre, puis le frapper.',
+      text: 'Les Noirs placent leur fou en g7 et roquent vite, en laissant les Blancs construire un grand centre. Puis ils frappent avec ...e5. Si les Blancs bloquent avec d5, l’attaque noire viendra sur l’aile roi avec ...f5.',
+      line: L('d2d4 g8f6 c2c4 g7g6 b1c3 f8g7 e2e4 d7d6 g1f3 e8g8 f1e2 e7e5 e1g1 b8c6 d4d5 c6e7'),
+      extra: [
+        {
+          type: 'quiz',
+          fen: 'rnbq1rk1/ppp1ppbp/3p1np1/8/2PPP3/2N2N2/PP2BPPP/R1BQK2R b KQ - 3 6',
+          question: 'Le roque est fait. Quel coup frappe le centre blanc ?',
+          options: ['e7e5', 'd6d5', 'f6e4', 'c8f5'],
+          answer: 0,
+          explain: 'e5 ! attaque d4 au bon moment : c’est l’idée de l’Est-indienne. d5 ? ouvre le jeu et les Blancs gagnent un pion après cxd5, Cxe4 ?? Cxe4 perd une pièce, et Ff5 ?? se fait prendre par exf5.',
+        },
+      ],
+    }),
+    openingLesson({
+      id: 'b-english',
+      title: 'Contre 1.c4 : l’Anglaise',
+      icon: '☕',
+      summary: 'Répondre 1...e5 : une Sicilienne inversée.',
+      text: 'Contre 1.c4, 1...e5 occupe le centre. C’est comme une Sicilienne avec les couleurs inversées : les Noirs jouent Cf6, d5 et se développent normalement. Après cxd5 Cxd5, le cavalier recule en b6 si on le chasse.',
+      line: L('c2c4 e7e5 b1c3 g8f6 g2g3 d7d5 c4d5 f6d5 f1g2 d5b6 g1f3 b8c6 e1g1 f8e7'),
+    }),
+  ],
+};

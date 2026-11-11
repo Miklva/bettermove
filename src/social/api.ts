@@ -1,6 +1,7 @@
 // Appels de l'API sociale (amis, sourdines, messages prives, defis) et des parties en ligne.
 import { apiCall } from '../sync/client';
 import { track } from '../achievements/events';
+import type { TalkReply } from '../puzzles/talk';
 
 const post = (body?: unknown) => ({ method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
 const enc = encodeURIComponent;
@@ -54,6 +55,10 @@ export interface Notifications {
   acceptedGames: number[];
   /** Revanches proposees par un adversaire, en attente de ma reponse */
   rematchOffers?: { gameId: number; from: string }[];
+  /** Reponses a mes questions sous les problemes, pas encore vues */
+  puzzleReplies?: TalkReply[];
+  /** Admin : messages non lus sous les problemes */
+  adminTalk?: number;
 }
 export interface OnlineGame {
   id: number;

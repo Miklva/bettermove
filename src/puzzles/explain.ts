@@ -37,6 +37,16 @@ const PIECE_WORDS: Record<string, Record<P, [string, string, string]>> = {
   de: { p: ['der Bauer', 'dein Bauer', 'ein Bauer'], n: ['der Springer', 'dein Springer', 'ein Springer'], b: ['der Läufer', 'dein Läufer', 'ein Läufer'], r: ['der Turm', 'dein Turm', 'ein Turm'], q: ['die Dame', 'deine Dame', 'eine Dame'], k: ['der König', 'dein König', 'ein König'] },
   ru: { p: ['пешка', 'твоя пешка', 'пешка'], n: ['конь', 'твой конь', 'конь'], b: ['слон', 'твой слон', 'слон'], r: ['ладья', 'твоя ладья', 'ладья'], q: ['ферзь', 'твой ферзь', 'ферзь'], k: ['король', 'твой король', 'король'] },
 };
+// Pluriels pour "tu gagnes 2 pions"
+const PLURAL: Record<string, Record<P, string>> = {
+  fr: { p: 'pions', n: 'cavaliers', b: 'fous', r: 'tours', q: 'dames', k: 'rois' },
+  en: { p: 'pawns', n: 'knights', b: 'bishops', r: 'rooks', q: 'queens', k: 'kings' },
+  es: { p: 'peones', n: 'caballos', b: 'alfiles', r: 'torres', q: 'damas', k: 'reyes' },
+  pt: { p: 'peões', n: 'cavalos', b: 'bispos', r: 'torres', q: 'damas', k: 'reis' },
+  de: { p: 'Bauern', n: 'Springer', b: 'Läufer', r: 'Türme', q: 'Damen', k: 'Könige' },
+  ru: { p: 'пешки', n: 'коня', b: 'слона', r: 'ладьи', q: 'ферзя', k: 'короля' },
+};
+const some = (p: P, n: number) => (n === 1 ? a(p) : `${n} ${(PLURAL[lang()] ?? PLURAL.en)[p]}`);
 const words = (p: P) => (PIECE_WORDS[lang()] ?? PIECE_WORDS.en)[p];
 const fem = (p: P) => p === 'r' || p === 'q';
 export const the = (p: P) => words(p)[0];
@@ -99,6 +109,8 @@ interface Motif {
   text: string;
   hint: string;
   shapes: Shape[];
+  /** Motif indiscutable (ex. pion qui attaque deux pieces) : annonce meme sans theme Lichess */
+  solid?: boolean;
 }
 
 /** Detecte les motifs tactiques crees par un coup */
@@ -160,13 +172,19 @@ export function detectMotifs(before: Chess, mv: Move, after: Chess, nextUci?: st
   if (kingFork && tg.length < 2) {
     for (const t of targets(after, to, us)) if (t.type !== 'k' && VAL[t.type] >= 3 && !tg.includes(t)) tg.push(t);
   }
-  if (tg.length >= 2) {
+  // Une "fourchette" dont la piece se fait prendre gratuitement n'en est pas une
+  const forkerAttackers = after.attackers(to, them);
+  const forkerSafe =
+    !forkerAttackers.length ||
+    (isDefended(after, to, us) && Math.min(...forkerAttackers.map((s) => VAL[(after.get(s)?.type ?? 'q') as P])) >= VAL[mover]);
+  if (tg.length >= 2 && forkerSafe) {
     const sorted = tg.sort((x, y) => VAL[y.type] - VAL[x.type]);
     found.push({
       key: 'fork',
       text: tr('Fourchette : {piece} en {sq} attaque {targets} en même temps. L’adversaire ne peut pas tout sauver.', { piece: your(mover), sq: to, targets: listFr(sorted.map((x) => the(x.type))) }),
       hint: tr('Cherche une fourchette : une pièce qui attaque deux cibles à la fois.'),
       shapes: sorted.map((t) => ({ orig: to, dest: t.sq, brush: 'red' as const })),
+      solid: mover === 'p' && sorted.filter((x) => x.type !== 'k' && VAL[x.type] >= 3).length >= 2,
     });
   }
 
@@ -183,7 +201,9 @@ export function detectMotifs(before: Chess, mv: Move, after: Chess, nextUci?: st
         key: 'discoveredAttack',
         text: isCheck
           ? tr('Échec à la découverte : en bougeant, {piece} libère la ligne de {other} qui donne échec.', { piece: your(mover), other: your(p.type as P) })
-          : tr('Attaque à la découverte : en bougeant, {piece} libère {other} qui attaque {target}.', { piece: your(mover), other: your(p.type as P), target: the(t.type) }),
+          : checkers.length === 1 && !checkers.includes(sq)
+            ? tr('Attaque à la découverte : {piece} donne échec, l’adversaire doit s’occuper de son roi, et en même temps {other} attaque {target} en {sq}.', { piece: your(mover), other: your(p.type as P), target: the(t.type), sq: t.sq })
+            : tr('Attaque à la découverte : en bougeant, {piece} libère {other} qui attaque {target} en {sq}.', { piece: your(mover), other: your(p.type as P), target: the(t.type), sq: t.sq }),
         hint: tr('Cherche une attaque à la découverte : une pièce qui bouge pour en démasquer une autre.'),
         shapes: [{ orig: sq, dest: t.sq, brush: 'red' }],
       });
@@ -281,6 +301,38 @@ export function detectMotifs(before: Chess, mv: Move, after: Chess, nextUci?: st
   return found;
 }
 
+/** Motifs "forts" qu'on n'annonce que si Lichess les a aussi reperes (evite les explications fausses) */
+const CLAIMS = new Set(['fork', 'pin', 'skewer', 'discoveredAttack', 'doubleCheck', 'sacrifice']);
+export function trusted(p: Puzzle, motifs: Motif[]): Motif[] {
+  if (!p.themes?.length) return motifs;
+  return motifs.filter((m) => m.solid || !CLAIMS.has(m.key) || p.themes.includes(m.key));
+}
+
+/** Evaluation en mots (point de vue du joueur), plutot qu'un chiffre */
+export function evalWords(cpUs: number, mateUs?: number): string {
+  if (mateUs === 0) return tr('échec et mat');
+  if (mateUs !== undefined) return mateUs > 0 ? tr('tu as un mat en {n}', { n: mateUs }) : tr('l’adversaire a un mat en {n}', { n: -mateUs });
+  if (cpUs >= 500) return tr('tu es gagnant');
+  if (cpUs >= 200) return tr('tu as un net avantage');
+  if (cpUs >= 80) return tr('tu es un peu mieux');
+  if (cpUs > -80) return tr('la position est équilibrée');
+  if (cpUs > -200) return tr('l’adversaire est un peu mieux');
+  if (cpUs > -500) return tr('l’adversaire a un net avantage');
+  return tr('tu es perdant');
+}
+
+/** Quantite de materiel en mots ("l'equivalent d'une tour") */
+function lossWords(n: number): string {
+  if (n >= 9) return tr('l’équivalent d’une dame');
+  if (n >= 5) return tr('l’équivalent d’une tour');
+  if (n >= 3) return tr('l’équivalent d’une pièce');
+  return tn(n, '{n} pion', '{n} pions');
+}
+
+/** Themes "d'idee" de Lichess, utilises pour expliquer un coup sans motif detecte */
+const QUIET_THEMES = ['quietMove', 'defensiveMove', 'zugzwang'];
+const IDEA_THEMES = ['trappedPiece', 'deflection', 'attraction', 'clearance', 'interference', 'intermezzo', 'capturingDefender', 'xRayAttack', 'quietMove', 'defensiveMove', 'zugzwang'];
+
 function themeList(p: Puzzle) {
   return visibleThemes(p.themes).map((k) => THEMES[k]);
 }
@@ -310,32 +362,94 @@ export async function explainSolution(p: Puzzle, notation: Notation, revealed: b
   const c = startPosition(p);
   const startFen = c.fen();
   const us = c.turn() as C;
-  const matStart = material(c, us);
-  const motifs = new Map<string, Motif>();
+  // Bilan compte depuis AVANT le coup adverse : s'il vient de prendre, on le deduit
+  const pre = new Chess(p.fen);
+  const matStart = material(pre, us);
+  const firstTake = play(pre, p.moves[0]).captured as P | undefined;
   const won: P[] = [];
-  const lost: P[] = [];
+  const lost: P[] = firstTake ? [firstTake] : [];
   const shapes: Shape[] = [];
   const sol = p.moves.slice(1);
+  const order = ['mate', 'fork', 'doubleCheck', 'discoveredAttack', 'pin', 'skewer', 'sacrifice', 'hangingPiece', 'trade', 'promotion', 'check'];
+  const ideaTheme = IDEA_THEMES.find((k) => p.themes?.includes(k));
+  let ideaUsed = false;
+  const said = new Set<string>();
+  const steps: string[] = [];
+  let mateText: string | null = null;
+  const MAX_STEPS = 4;
+
   for (let i = 0; i < sol.length; i++) {
     const before = new Chess(c.fen());
+    const moveNo = before.moveNumber();
     const mv = play(c, sol[i]);
     if (mv.captured) (mv.color === us ? won : lost).push(mv.captured as P);
-    if (mv.color === us) {
-      shapes.push({ orig: mv.from, dest: mv.to, brush: 'green' });
-      for (const m of detectMotifs(before, mv, c, sol[i + 1])) if (!motifs.has(m.key)) motifs.set(m.key, m);
+    if (mv.color !== us) continue;
+    shapes.push({ orig: mv.from, dest: mv.to, brush: 'green' });
+
+    // Reponse adverse (forcee ou non) pour raconter la suite
+    const replyUci = sol[i + 1];
+    let replySan = '';
+    let forced = false;
+    if (replyUci) {
+      const t = new Chess(c.fen());
+      forced = t.moves().length === 1;
+      try {
+        replySan = formatSan(play(t, replyUci).san, notation);
+      } catch {
+        replySan = '';
+      }
     }
+
+    const motifs = trusted(p, detectMotifs(before, mv, c, replyUci)).sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key));
+    if (motifs[0]?.key === 'mate') mateText = motifs[0].text;
+    // On evite de repeter deux fois la meme idee
+    const fresh = motifs.find((m) => m.key !== 'mate' && !said.has(m.key));
+    let why = '';
+    let replyTold = false;
+    if (fresh) {
+      why = fresh.text;
+      said.add(fresh.key);
+    } else if (motifs[0]?.key === 'mate') {
+      why = motifs[0].text;
+    } else if (ideaTheme && !ideaUsed && THEMES[ideaTheme]?.tip && (!QUIET_THEMES.includes(ideaTheme) || (!mv.captured && !c.inCheck()))) {
+      const tip = tr(THEMES[ideaTheme].tip!);
+      // Allemand : les noms gardent leur majuscule
+      why = tr('{label} : {tip}', { label: tr(THEMES[ideaTheme].label), tip: lang() === 'de' ? tip : tip.charAt(0).toLowerCase() + tip.slice(1) });
+      ideaUsed = true;
+    } else if (mv.captured) {
+      const recapture = replyUci?.slice(2, 4) === mv.to;
+      replyTold = recapture && !!replySan;
+      why = recapture
+        ? tr('Échange : tu prends {piece} en {sq}, l’adversaire reprend avec {reply}.', { piece: the(mv.captured as P), sq: mv.to, reply: replySan })
+        : tr('Tu prends {piece} en {sq}.', { piece: the(mv.captured as P), sq: mv.to });
+    } else if (c.inCheck()) {
+      why = tr('Échec : l’adversaire n’a pas le choix, il doit s’occuper de son roi.');
+    } else {
+      // Coup calme : que menace-t-il ?
+      const beforeT = new Set(targets(before, mv.from as Square, us).map((x) => x.sq));
+      const threat = targets(c, mv.to as Square, us)
+        .filter((x) => x.type !== 'k' && !beforeT.has(x.sq) && (VAL[x.type] > VAL[mv.piece as P] || !isDefended(c, x.sq, other(us))))
+        .sort((x, y) => VAL[y.type] - VAL[x.type])[0];
+      const nearPromo = mv.piece === 'p' && mv.to[1] === (us === 'w' ? '7' : '2');
+      why = threat
+        ? tr('Menace : {piece} attaque {target} en {sq}.', { piece: your(mv.piece as P), target: the(threat.type), sq: threat.sq })
+        : nearPromo
+          ? tr('Ton pion arrive en {sq} : il menace d’aller à dame au prochain coup.', { sq: mv.to })
+          : tr('Coup de préparation : il met en place la suite.');
+    }
+
+    const san = formatSan(mv.san, notation);
+    const num = us === 'w' ? `${moveNo}. ` : `${moveNo}... `;
+    let step = `${num}${san} — ${why}`;
+    if (replySan && !replyTold) step = `${dot(step.replace(/\.$/, ''))} ${forced ? tr('Seul coup possible : {reply}.', { reply: replySan }) : tr('L’adversaire répond {reply}.', { reply: replySan })}`;
+    if (steps.length < MAX_STEPS) steps.push(step);
   }
 
-  const points: string[] = [];
-  // Motif principal en premier, puis les autres (max 3)
-  const order = ['mate', 'fork', 'doubleCheck', 'discoveredAttack', 'pin', 'skewer', 'sacrifice', 'hangingPiece', 'trade', 'promotion', 'check'];
-  const sorted = [...motifs.values()].sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key));
-  for (const m of sorted.filter((m) => m.key !== 'mate').slice(0, 3)) points.push(m.text);
-
-  points.push(tr('Solution : {line}', { line: formatLine(startFen, sol, notation, 12) }));
+  const points: string[] = [...steps];
+  if (steps.length * 2 < sol.length) points.push(tr('Solution complète : {line}', { line: formatLine(startFen, sol, notation, 12) }));
 
   if (c.isCheckmate()) {
-    points.push(motifs.get('mate')?.text ?? tr('Le dernier coup est échec et mat.'));
+    if (!steps.some((s) => mateText && s.includes(mateText))) points.push(mateText ?? tr('Le dernier coup est échec et mat.'));
   } else {
     const gain = material(c, us) - matStart;
     if (gain >= 1) {
@@ -343,16 +457,26 @@ export async function explainSolution(p: Puzzle, notation: Notation, revealed: b
       const net = new Map<P, number>();
       for (const t of won) net.set(t, (net.get(t) ?? 0) + 1);
       for (const t of lost) net.set(t, (net.get(t) ?? 0) - 1);
-      const plus = [...net].filter(([, n]) => n > 0).flatMap(([t, n]) => Array(n).fill(a(t)));
-      const minus = [...net].filter(([, n]) => n < 0).flatMap(([t, n]) => Array(-n).fill(a(t)));
-      const detail = plus.length ? (minus.length ? tr(' : {plus} contre {minus}', { plus: listFr(plus), minus: listFr(minus) }) : tr(' : {plus}', { plus: listFr(plus) })) : '';
-      points.push(tn(gain, 'Bilan : tu gagnes {n} point de matériel{detail}.', 'Bilan : tu gagnes {n} points de matériel{detail}.', { detail }));
+      const plus = [...net].filter(([, n]) => n > 0).map(([t, n]) => some(t, n));
+      const minus = [...net].filter(([, n]) => n < 0).map(([t, n]) => some(t, -n));
+      points.push(
+        plus.length
+          ? minus.length
+            ? tr('Résultat : tu gagnes {plus} contre {minus}.', { plus: listFr(plus), minus: listFr(minus) })
+            : tr('Résultat : tu gagnes {plus}.', { plus: listFr(plus) })
+          : tr('Résultat : tu gagnes {x}.', { x: lossWords(gain) }),
+      );
     } else {
       const [line] = await engine.analyse(c.fen(), { depth: 12 });
       const sign = c.turn() === us ? 1 : -1;
       if (line) {
-        const ev = fmtEval(sign * line.cp, line.mate !== undefined ? sign * line.mate : undefined);
-        points.push(tr('Bilan : pas de matériel gagné tout de suite, mais la position devient bien meilleure (évaluation {ev}).', { ev }));
+        const words = evalWords(sign * line.cp, line.mate !== undefined ? sign * line.mate : undefined);
+        const saving = p.themes?.includes('equality') || p.themes?.includes('defensiveMove');
+        points.push(
+          saving
+            ? tr('Résultat : tu sauves la position ({words}).', { words })
+            : tr('Résultat : pas de matériel gagné tout de suite, mais {words}.', { words }),
+        );
       }
     }
   }
@@ -374,7 +498,7 @@ export function hintFor(p: Puzzle, fenBefore: string, expectedUci: string): stri
   const before = new Chess(fenBefore);
   const after = new Chess(fenBefore);
   const mv = play(after, expectedUci);
-  const motifs = detectMotifs(before, mv, after);
+  const motifs = trusted(p, detectMotifs(before, mv, after));
   if (motifs.length) return motifs[0].hint;
   const th = visibleThemes(p.themes)[0];
   if (th && THEMES[th]?.tip) return tr('Thème : {label}. {tip}', { label: THEMES[th].label, tip: THEMES[th].tip! });
@@ -436,7 +560,7 @@ export async function explainMistake(
     verdict = 'soft';
     title = tr('Bon coup, mais pas le meilleur');
     points.push(
-      tr('{move} est un bon coup (évaluation {ev}), mais il existe plus fort ou plus direct. Le problème attend le coup le plus précis.', { move: wrongSan, ev: fmtEval(evWrong, mateWrong) }),
+      tr('{move} est un bon coup ({words}), mais il existe plus fort ou plus direct. Le problème attend le coup le plus précis.', { move: wrongSan, words: evalWords(evWrong, mateWrong) }),
     );
   } else if (mateWrong !== undefined && mateWrong < 0) {
     points.push(dot(tr('Après {move}, l’adversaire a un mat en {n} : {line}', { move: wrongSan, n: -mateWrong, line: formatLine(afterFen, ref!.pv, notation, 6) })));
@@ -485,11 +609,11 @@ export async function explainMistake(
     if (replySan && ref && ref.pv.length > 1 && !points[0]?.includes(formatLine(afterFen, ref.pv, notation, 1)))
       points.push(dot(tr('Suite probable : {line}', { line: formatLine(afterFen, ref.pv, notation, 5) })));
 
-    if (loss >= 2) points.push(tr('Bilan : tu perdrais environ {n} points de matériel.', { n: loss }));
+    if (loss >= 2) points.push(tr('Au bout de cette suite, tu perds {x}.', { x: lossWords(loss) }));
   }
 
   if (verdict === 'fail')
-    points.push(tr('Évaluation : {best} avec le bon coup, {mine} après le tien.', { best: fmtEval(evBest, mateBest), mine: fmtEval(evWrong, mateWrong) }));
+    points.push(tr('Avec le bon coup, {best}. Après le tien, {mine}.', { best: evalWords(evBest, mateBest), mine: evalWords(evWrong, mateWrong) }));
 
   return {
     verdict,
@@ -567,7 +691,7 @@ export function progressiveHint(p: Puzzle, fenBefore: string, expectedUci: strin
   } catch {
     mate = null;
   }
-  const motifs = detectMotifs(before, mv, after);
+  const motifs = trusted(p, detectMotifs(before, mv, after));
   const threats = threatened(before, us);
   const threatsAfter = threatened(after, us);
   const newTargets = targets(after, mv.to as Square, us).filter(

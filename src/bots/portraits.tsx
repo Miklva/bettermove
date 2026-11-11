@@ -1,6 +1,6 @@
 // Portraits des bots : bustes illustres en SVG, dessines a la main (aucune image externe).
 // Chaque bot est decrit par quelques parametres (peau, cheveux, tenue, accessoires).
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 type Hair = 'kid' | 'ponytail' | 'messy' | 'bob' | 'fade' | 'curly' | 'sidepart' | 'long' | 'bald' | 'updo';
 type Outfit = 'hoodie' | 'sweater' | 'tee' | 'cardigan' | 'jacket' | 'blouse' | 'turtleneck' | 'leather' | 'tweed' | 'gown';
@@ -556,7 +556,8 @@ function Robot() {
 /** Portrait illustre d'un bot (buste et tete) */
 export function BotPortrait({ id, size = 40, className = '' }: { id: string; size?: number; className?: string }) {
   const l = LOOKS[id];
-  const gid = `bp-${id}`;
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const gid = `bp-${id}-${uid}`;
   const bg: [string, string] = l?.bg ?? ['#d7f3ff', '#5b6b8c'];
   return (
     <svg
